@@ -171,9 +171,15 @@ svg.stage.drag{cursor:grabbing}
 .pick input{width:100%;padding:10px 14px;border-radius:0;border:1.5px solid var(--line);background:#fff}
 .relbig{font-family:"IBM Plex Serif",serif;font-size:1.6rem;line-height:1.25;margin:0}
 .ladder{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-top:16px}
-.ladder .top{grid-column:1/-1;justify-self:center;max-width:420px;width:100%}
+.ladder .top{grid-column:1/-1;justify-self:center;max-width:600px;width:100%}
+.ladder .pc b,.ladder .pc small{white-space:normal}
 .ladder .col{display:flex;flex-direction:column;gap:6px;align-items:stretch}
 .ladder .arrow{text-align:center;color:var(--muted);font-size:.9rem;line-height:1}
+.ladder .ladtag,.ladder .colhead{font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:6px}
+.ladder .colhead{color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:4px;margin-bottom:8px}
+.ladder .fork{grid-column:1/-1;position:relative;height:24px;margin:-4px 0 -2px}
+.ladder .fork::before{content:'';position:absolute;left:50%;top:0;height:11px;border-left:2px solid #b9ab92}
+.ladder .fork span{position:absolute;left:25%;right:25%;top:11px;height:13px;border:2px solid #b9ab92;border-bottom:0}
 
 /* timeline */
 .tl text{font-size:12px;font-family:"IBM Plex Sans",sans-serif}
@@ -251,7 +257,11 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
   dialog .db{max-height:none;flex:1}
   dialog[open]{display:flex;flex-direction:column}
   .fam-hero h2{font-size:1.5rem}
-  .ladder{grid-template-columns:1fr}
+  .ladder{gap:8px 10px}
+  .ladder .pc{padding:7px 8px;gap:8px;align-items:flex-start}
+  .ladder .pc .av{width:34px;height:34px;font-size:.85rem}
+  .ladder .pc b,.ladder .pc small{white-space:normal}
+  .ladder .pc b{font-size:.92rem;line-height:1.2}
   .legend{display:none}
 }
 /* photo crop & viewer */
@@ -1031,9 +1041,11 @@ function renderRelated(focusKey) {
         : r.kind === 'via-spouse' ? ` · through ${esc(P(r.via).given)}, ${esc(P(A).given)}’s ${esc(sexWord(P(r.via), 'wife', 'husband', 'spouse'))}` : '';
       const gens = br.da && br.db ? `Both descend from ${esc(top.map(shortName).join(' & '))}: ${esc(P(A).given)} ${br.da === 1 ? '1 generation' : br.da + ' generations'} down, ${esc(P(B).given)} ${br.db === 1 ? '1 generation' : br.db + ' generations'} down.` : 'Direct line.';
       h += `<p class="muted" style="margin:10px 0 0">${gens}${via}</p>
-        <div class="ladder"><div class="top"><div class="grid" style="grid-template-columns:repeat(${top.length},1fr)">${top.map(x => pcard(x, lifeYears(x) || 'shared ancestor')).join('')}</div></div>
-        <div class="col">${[...colA].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === colA[0] ? (r.kind === 'via-spouse' ? 'spouse of ' + P(A).given : 'first person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div>
-        <div class="col">${[...colB].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === colB[0] ? (r.kind === 'spouse-of' ? 'spouse of ' + P(B).given : 'second person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div></div>`;
+        <div class="ladder"><div class="top"><div class="ladtag">Shared ancestors</div><div class="grid" style="grid-template-columns:repeat(${top.length},1fr)">${top.map(x => pcard(x, lifeYears(x) || 'shared ancestor')).join('')}</div></div>
+        ${colA.length && colB.length ? '<div class="fork" aria-hidden="true"><span></span></div>' : ''}
+        ${[[colA, A, r.kind === 'via-spouse'], [colB, B, r.kind === 'spouse-of']].map(([col, who, viaSp]) => `<div class="col"><div class="colhead">${esc(P(who).given)}’s line</div>${
+          [...col].reverse().map((x, i) => (i ? '<div class="arrow">↓</div>' : '') + pcard(x, x === col[0] ? (viaSp ? 'spouse of ' + P(who).given : lifeYears(x) || '') : lifeYears(x))).join('')
+          || `<p class="muted" style="text-align:center;margin:4px 0">${esc(P(who).given)} is one of the shared ancestors</p>`}</div>`).join('')}</div>`;
     }
     h += `</div>`;
   } else {
