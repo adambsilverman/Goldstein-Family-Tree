@@ -1,0 +1,4 @@
+# Family data stays on Adam's Mac only — this repository is public
+private/
+.claude/
+.DS_Store

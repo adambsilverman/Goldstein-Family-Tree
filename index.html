@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Family Tree</title>
+<meta name="description" content="The Goldstein family tree: explore, and add what you know.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<!-- Goldstein Family Tree · one-file app. Data lives in the browser (this device) or a shared
+     Firebase Realtime Database (family link). Starting data: private/goldstein-seed.js, which is
+     kept only on Adam's Mac and never uploaded. Source of truth for code: this file. -->
+<style>
+:root{
+  --paper:#f6f1e7; --paper2:#efe7d8; --card:#fffdf8; --ink:#2a231d; --muted:#6b6056; --line:#e2d8c6;
+  --accent:#1f5c5a; --accent2:#174745; --warn:#a4501f; --ok:#2e7d4f; --sel:#f2c14e;
+  --b0:#b5523b; --b1:#3f7d6e; --b2:#4a6aa5; --b3:#a06a1f; --b4:#7b5aa6; --b5:#2f8a9a; --b6:#b0476f; --bx:#8a8178;
+  --r:14px; --shadow:0 1px 0 var(--line),0 6px 18px #5a46301a;
+  font-size:16px;
+}
+body.big{font-size:19px}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--paper);color:var(--ink);font-family:"Atkinson Hyperlegible",system-ui,sans-serif;line-height:1.45;
+  display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+h1,h2,h3,.serif{font-family:Fraunces,Georgia,serif;font-weight:600;letter-spacing:-.01em}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- header ---------- */
+header.top{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap;z-index:5}
+.brand{display:flex;flex-direction:column;min-width:0;margin-right:auto}
+.brand h1{margin:0;font-size:1.35rem;line-height:1.1;white-space:nowrap}
+.brand small{color:var(--muted);font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46ch}
+.search{position:relative;flex:1 1 220px;max-width:340px}
+.search input{width:100%;padding:9px 14px 9px 36px;border-radius:999px;border:1.5px solid var(--line);background:var(--paper)}
+.search input:focus{outline:none;border-color:var(--accent);background:#fff}
+.search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);opacity:.5}
+.results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+  max-height:60vh;overflow:auto;z-index:30;display:none}
+.results.open{display:block}
+.results button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 14px;cursor:pointer}
+.results button:hover,.results button.hi{background:var(--paper2)}
+.results .ctx{display:block;color:var(--muted);font-size:.82rem}
+.hbtns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:var(--paper);border-radius:999px;padding:7px 12px;cursor:pointer;white-space:nowrap;font-size:.9rem}
+.pill:hover{border-color:var(--accent)}
+.pill.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.pill.primary:hover{background:var(--accent2)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--bx);flex:none}
+.dot.live{background:#2e9d5a;box-shadow:0 0 0 3px #2e9d5a33}
+.dot.busy{background:var(--sel)}
+.dot.off{background:var(--warn)}
+
+nav.tabs{display:flex;gap:4px;padding:6px 12px 0;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none}
+nav.tabs button{border:0;background:none;padding:9px 14px 11px;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;color:var(--muted);font-weight:700}
+nav.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs button .n{display:inline-block;background:var(--warn);color:#fff;border-radius:999px;font-size:.72rem;padding:0 7px;margin-left:5px;vertical-align:1px}
+
+main{flex:1;position:relative;overflow:hidden}
+.view{position:absolute;inset:0;overflow:auto;display:none}
+.view.on{display:block}
+.view.canvas{overflow:hidden;background:
+  radial-gradient(circle at 1px 1px,#d9cdb733 1px,transparent 0) 0 0/22px 22px,var(--paper)}
+.pad{max-width:1000px;margin:0 auto;padding:22px 18px 80px}
+
+/* ---------- canvas views ---------- */
+svg.stage{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+svg.stage.drag{cursor:grabbing}
+.tools{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px;z-index:4}
+.tools button,.ctool{width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:var(--card);box-shadow:var(--shadow);cursor:pointer;font-size:1.2rem;display:grid;place-items:center}
+.tools button:hover{border-color:var(--accent)}
+.ctools{position:absolute;left:14px;top:12px;display:flex;gap:6px;flex-wrap:wrap;z-index:4}
+.ctools .pill{background:var(--card);box-shadow:var(--shadow)}
+.legend{position:absolute;left:14px;bottom:14px;background:#fffdf8e6;border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:.8rem;z-index:3;max-width:calc(100% - 90px)}
+.legend span{display:inline-flex;align-items:center;gap:5px;margin:2px 10px 2px 0;white-space:nowrap}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+.node rect.box{fill:#fffdf8;stroke:var(--line);stroke-width:1.2}
+.node:hover rect.box{stroke:var(--accent)}
+.node.sel rect.box{stroke:var(--ink);stroke-width:2.5}
+.node.me rect.box{fill:#fff6dd}
+.node text{font-family:"Atkinson Hyperlegible",sans-serif;fill:var(--ink)}
+.node .nm{font-weight:700;font-size:14px}
+.node .yr{font-size:11.5px;fill:var(--muted)}
+.node .sp{font-size:12px;fill:#4a4038}
+.node .tg circle{fill:#fff;stroke:var(--line)}
+.node .tg:hover circle{stroke:var(--accent)}
+.node .tg text{font-size:11px;font-weight:700;fill:var(--muted);text-anchor:middle}
+.node .unc{font-size:12px;font-weight:700;fill:var(--warn)}
+.link{fill:none;stroke-width:1.6;opacity:.55}
+.fan .lbl{font-size:12px;font-family:"Atkinson Hyperlegible",sans-serif;fill:var(--ink);cursor:pointer}
+.fan .lbl:hover{text-decoration:underline}
+.fan .lbl.d1{font-family:Fraunces,serif;font-weight:700;font-size:17px}
+.fan .lbl.sel{font-weight:700;fill:#000}
+.fan .lbl.me{fill:#9a5b00;font-weight:700}
+.fan circle.n{stroke:#fff;stroke-width:1.5;cursor:pointer}
+.flash{animation:flash 1.6s ease 2}
+@keyframes flash{50%{opacity:.25}}
+
+/* ---------- cards ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.pc{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);
+  cursor:pointer;text-align:left;min-width:0;width:100%;border-left:5px solid var(--bc,var(--bx))}
+.pc:hover{border-color:var(--accent);border-left-color:var(--bc,var(--bx))}
+.pc .t{min-width:0}
+.pc b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc small{display:block;color:var(--muted);font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.av{width:42px;height:42px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:700;color:#fff;background:var(--bc,var(--bx));
+  font-family:Fraunces,serif;font-size:1.05rem;background-size:cover;background-position:center}
+.av.lg{width:96px;height:96px;font-size:2.2rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.sec{margin:22px 0 8px;font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;cursor:pointer;margin:0 6px 6px 0;font-size:.92rem}
+.chip:hover{border-color:var(--accent)}
+.badge{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--paper2);color:var(--muted);vertical-align:2px}
+.badge.warn{background:#fbe6d6;color:var(--warn)}
+.badge.me{background:#fff0c2;color:#7a5200}
+.rel{color:#7a5200;font-weight:700}
+.btn{border:1.5px solid var(--line);background:var(--card);border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:700}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent2)}
+.btn.danger{color:#a3271b}
+.btn.danger:hover{border-color:#a3271b}
+.btn.sm{padding:4px 10px;font-size:.85rem;border-radius:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.muted{color:var(--muted)}
+.empty{text-align:center;color:var(--muted);padding:40px 20px}
+
+/* family view */
+.fam-hero{display:flex;gap:20px;align-items:center;padding:22px;flex-wrap:wrap}
+.fam-hero h2{margin:0;font-size:2rem;line-height:1.1}
+.fam-hero .meta{color:var(--muted);margin-top:4px}
+.fam-hero .acts{margin-left:auto}
+.crumbs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;font-size:.9rem}
+.crumbs button{border:0;background:none;color:var(--accent);cursor:pointer;padding:2px 4px;text-decoration:underline}
+.union{padding:14px;margin-bottom:12px}
+.union h4{margin:0 0 10px;font-size:1rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.warnbox{background:#fbefe4;border:1px solid #efcfb4;color:#6b3410;border-radius:12px;padding:10px 14px;margin:10px 0}
+
+/* list view */
+.outline ul{list-style:none;margin:0;padding-left:22px;border-left:1px dashed var(--line)}
+.outline>ul{padding-left:0;border:0}
+.outline li{margin:2px 0}
+.outline .ln{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;padding:3px 6px;border-radius:8px}
+.outline .ln:hover{background:var(--paper2)}
+.outline .tw{border:0;background:none;width:22px;cursor:pointer;color:var(--muted);flex:none;padding:0}
+.outline .nm{border:0;background:none;padding:0;font-weight:700;cursor:pointer;text-align:left}
+.outline .nm:hover{text-decoration:underline}
+.outline .sp,.outline .yr{color:var(--muted);font-size:.9rem}
+.outline mark{background:#f9e3a0;border-radius:3px}
+.outline .bh{font-family:Fraunces,serif;font-size:1.15rem}
+
+/* related */
+.pick{position:relative}
+.pick input{width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--line);background:#fff}
+.relbig{font-family:Fraunces,serif;font-size:1.6rem;line-height:1.25;margin:0}
+.ladder{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-top:16px}
+.ladder .top{grid-column:1/-1;justify-self:center;max-width:420px;width:100%}
+.ladder .col{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.ladder .arrow{text-align:center;color:var(--muted);font-size:.9rem;line-height:1}
+
+/* timeline */
+.tl text{font-size:12px;font-family:"Atkinson Hyperlegible",sans-serif}
+
+/* help fill-in */
+.stat{padding:14px 16px}
+.stat b{font-family:Fraunces,serif;font-size:1.7rem;display:block;line-height:1.1}
+.bar{height:8px;border-radius:99px;background:var(--paper2);overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--accent)}
+table.quick{width:100%;border-collapse:collapse}
+table.quick td,table.quick th{padding:6px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+table.quick th{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+table.quick input[type=text]{width:100%;min-width:110px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+table.quick input.saved{border-color:var(--ok);background:#effaf2}
+.log li{padding:6px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+
+/* ---------- side panel ---------- */
+#panel{position:absolute;top:0;right:0;bottom:0;width:min(380px,100%);background:var(--card);border-left:1px solid var(--line);box-shadow:-8px 0 24px #3a2a1a1f;
+  transform:translateX(105%);transition:transform .22s ease;z-index:20;overflow:auto;padding:18px}
+#panel.open{transform:none}
+#panel .x{position:absolute;right:10px;top:10px}
+.iconbtn{border:0;background:none;font-size:1.4rem;cursor:pointer;width:38px;height:38px;border-radius:10px;color:var(--muted)}
+.iconbtn:hover{background:var(--paper2);color:var(--ink)}
+
+/* ---------- dialogs ---------- */
+dialog{border:0;border-radius:18px;padding:0;max-width:min(680px,96vw);width:100%;background:var(--card);color:var(--ink);box-shadow:0 20px 60px #0004}
+dialog::backdrop{background:#2a231d66}
+dialog .dh{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:2}
+dialog .dh h3{margin:0;font-size:1.3rem;flex:1}
+dialog .db{padding:16px 20px;max-height:72vh;overflow:auto}
+dialog .df{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line);flex-wrap:wrap}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:.82rem;font-weight:700;color:var(--muted)}
+.form .full{grid-column:1/-1}
+.form input,.form select,.form textarea{padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-weight:400;color:var(--ink);font-size:1rem}
+.form input:focus,.form select:focus,.form textarea:focus{outline:none;border-color:var(--accent)}
+.form .chk{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-weight:400;font-size:1rem}
+.conn{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--paper)}
+.conn .row{justify-content:space-between}
+.kids{margin:8px 0 0;padding:0;list-style:none}
+.kids li{display:flex;gap:6px;align-items:center;padding:3px 0}
+.kids li span{flex:1}
+.qr{display:grid;place-items:center;padding:10px;background:#fff;border-radius:12px;border:1px solid var(--line)}
+.qr svg{width:min(260px,70vw);height:auto}
+.steps{padding-left:20px}
+.steps li{margin:6px 0}
+code{background:var(--paper2);padding:1px 5px;border-radius:5px;font-size:.88em;word-break:break-all}
+pre.code{background:var(--paper2);padding:10px 12px;border-radius:10px;font-size:.82rem;white-space:pre-wrap;word-break:break-all;user-select:all}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(120px);background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;
+  transition:transform .25s ease;z-index:100;font-size:.95rem;max-width:90vw}
+.toast.on{transform:translateX(-50%)}
+.toast button{background:none;border:0;color:var(--sel);font-weight:700;cursor:pointer;margin-left:10px}
+.menu{position:absolute;top:calc(100% + 6px);right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);min-width:230px;z-index:40;display:none;padding:6px}
+.menu.open{display:block}
+.menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 12px;border-radius:8px;cursor:pointer}
+.menu button:hover{background:var(--paper2)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:5px 0}
+
+.welcome{max-width:560px;margin:8vh auto;padding:30px}
+.welcome h2{font-size:2rem;margin:0 0 8px}
+
+@media (max-width:700px){
+  .brand small{display:none}
+  .brand h1{font-size:1.1rem}
+  header.top{gap:8px;padding:8px 10px}
+  .search{order:3;flex-basis:100%;max-width:none}
+  .hbtns .lbl{display:none}
+  .form{grid-template-columns:1fr}
+  dialog{max-width:100vw;max-height:100vh;height:100%;border-radius:0;margin:0}
+  dialog .db{max-height:none;flex:1}
+  dialog[open]{display:flex;flex-direction:column}
+  .fam-hero h2{font-size:1.5rem}
+  .ladder{grid-template-columns:1fr}
+  .legend{display:none}
+}
+@media print{
+  header.top,nav.tabs,.tools,.ctools,#panel,.legend{display:none!important}
+  body{overflow:visible;display:block;height:auto}
+  main,.view.on{position:static;overflow:visible}
+}
+@media (prefers-reduced-motion:reduce){#panel,.toast{transition:none}.flash{animation:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><h1 id="title">Family Tree</h1><small id="subtitle"></small></div>
+  <div class="search">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Find someone…" autocomplete="off" aria-label="Find a person" role="combobox" aria-expanded="false" aria-controls="qres">
+    <div class="results" id="qres" role="listbox"></div>
+  </div>
+  <div class="hbtns">
+    <button class="pill" id="meBtn" title="Tell the tree who you are">🙋 <span class="lbl" id="meLbl">Who are you?</span></button>
+    <button class="pill" id="syncBtn" title="Sharing and saving"><span class="dot" id="syncDot"></span><span class="lbl" id="syncLbl">On this device</span></button>
+    <button class="pill" id="undoBtn" title="Undo" disabled hidden>↶ <span class="lbl">Undo</span></button>
+    <div style="position:relative">
+      <button class="pill" id="menuBtn" aria-haspopup="true" aria-expanded="false" title="More">☰ <span class="lbl">More</span></button>
+      <div class="menu" id="menu" role="menu">
+        <button data-act="share" role="menuitem">📲 Share with family (QR code)</button>
+        <button data-act="big" role="menuitem">🔠 Bigger text</button>
+        <hr>
+        <button data-act="backup" role="menuitem">💾 Download a backup (.json)</button>
+        <button data-act="import" role="menuitem">📂 Open a backup…</button>
+        <button data-act="gedcom" role="menuitem">🧬 Export for Ancestry / FamilySearch (.ged)</button>
+        <button data-act="svg" role="menuitem">🖼️ Download the full chart (poster .svg)</button>
+        <button data-act="print" role="menuitem">🖨️ Print this view</button>
+        <hr>
+        <button data-act="log" role="menuitem">🕘 Recent changes</button>
+        <button data-act="about" role="menuitem">ℹ️ How this works</button>
+      </div>
+    </div>
+  </div>
+</header>
+<nav class="tabs" role="tablist" aria-label="Views">
+  <button role="tab" data-view="tree">🌳 Tree</button>
+  <button role="tab" data-view="fan">🌀 Fan</button>
+  <button role="tab" data-view="family">👪 Family</button>
+  <button role="tab" data-view="list">📜 List</button>
+  <button role="tab" data-view="related">🔗 How are we related?</button>
+  <button role="tab" data-view="timeline">📅 Timeline</button>
+  <button role="tab" data-view="help">✍️ Fill in the gaps<span class="n" id="gapN" hidden></span></button>
+</nav>
+<main>
+  <section class="view canvas" id="v-tree" role="tabpanel">
+    <svg class="stage" id="treeSvg" aria-label="Family tree chart"><g id="treeG"></g></svg>
+    <div class="ctools">
+      <button class="pill" id="expandAll">Expand all</button>
+      <button class="pill" id="collapseAll">Collapse</button>
+      <button class="pill" id="treeMe" hidden>Find me</button>
+    </div>
+    <div class="tools"><button data-z="in" aria-label="Zoom in">+</button><button data-z="out" aria-label="Zoom out">−</button><button data-z="fit" aria-label="Fit to screen">⤢</button></div>
+    <div class="legend" id="legend1"></div>
+  </section>
+  <section class="view canvas" id="v-fan" role="tabpanel">
+    <svg class="stage fan" id="fanSvg" aria-label="Fan chart of all descendants"><g id="fanG"></g></svg>
+    <div class="tools"><button data-z="in" aria-label="Zoom in">+</button><button data-z="out" aria-label="Zoom out">−</button><button data-z="fit" aria-label="Fit to screen">⤢</button></div>
+    <div class="legend" id="legend2"></div>
+  </section>
+  <section class="view" id="v-family" role="tabpanel"><div class="pad" id="famPad"></div></section>
+  <section class="view" id="v-list" role="tabpanel"><div class="pad">
+    <div class="row" style="margin-bottom:12px">
+      <input id="listQ" type="search" placeholder="Filter by name…" style="flex:1;min-width:200px;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px">
+      <button class="btn sm" id="listOpen">Open all</button><button class="btn sm" id="listClose">Close all</button>
+    </div>
+    <div class="outline" id="outline"></div></div></section>
+  <section class="view" id="v-related" role="tabpanel"><div class="pad" id="relPad"></div></section>
+  <section class="view" id="v-timeline" role="tabpanel"><div class="pad" id="tlPad" style="max-width:none"></div></section>
+  <section class="view" id="v-help" role="tabpanel"><div class="pad" id="helpPad"></div></section>
+  <section class="view" id="v-welcome"><div class="welcome card" id="welcome"></div></section>
+  <aside id="panel" aria-label="Person details"></aside>
+</main>
+
+<dialog id="dlg"></dialog>
+<dialog id="dlg2"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<input type="file" id="photoIn" accept="image/*" hidden>
+
+<script src="qrcode.js"></script>
+<script src="private/goldstein-seed.js" onerror="void 0"></script>
+<script>
+'use strict';
+/* ================================================================
+   Goldstein Family Tree — core: data model, indexes, names,
+   relationships, storage (this device / shared live database).
+   Data shape:
+     T = { meta:{title,subtitle}, root:"p001",
+           people:{ id:{id,given,middle,surname,birthSurname,nick,sex,birth,birthPlace,
+                        death,deathPlace,deceased,notes,photo,parentsUncertain} },
+           unions:{ id:{id,partners:[pid,pid?],children:[pid…],married,place,ended,endDate,notes} },
+           log:{ key:{t,who,msg} } }
+   ================================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clone = o => o == null ? o : JSON.parse(JSON.stringify(o));
+const LS = {
+  get(k, d = null) { try { const v = localStorage.getItem('gft.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('gft.' + k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem('gft.' + k); } catch (e) {} }
+};
+const rid = (pre, n = 8) => { const a = 'abcdefghijkmnopqrstuvwxyz23456789'; let s = ''; const r = crypto.getRandomValues(new Uint8Array(n)); for (const x of r) s += a[x % a.length]; return pre + s; };
+
+let T = null;                     // the tree
+const IX = { parentU: {}, unionsOf: {}, branch: {}, depth: {}, blood: new Set(), root: null, top: [] };
+const BR = ['--b0', '--b1', '--b2', '--b3', '--b4', '--b5', '--b6'];
+const brColor = pid => { const b = IX.branch[pid]; return b == null || b < 0 ? 'var(--bx)' : `var(${BR[b % BR.length]})`; };
+
+/* ---------- normalising (Firebase turns arrays into objects and drops empty ones) ---------- */
+const arr = x => Array.isArray(x) ? x.filter(v => v != null) : (x && typeof x === 'object') ? Object.keys(x).sort((a, b) => a - b).map(k => x[k]).filter(v => v != null) : [];
+const PF = ['given', 'middle', 'surname', 'birthSurname', 'nick', 'sex', 'birth', 'birthPlace', 'death', 'deathPlace', 'notes', 'photo'];
+function normPerson(p, id) { p = p || {}; p.id = id; for (const f of PF) if (typeof p[f] !== 'string') p[f] = p[f] == null ? '' : String(p[f]); p.deceased = !!p.deceased || !!p.death; p.parentsUncertain = !!p.parentsUncertain; return p; }
+function normUnion(u, id) { u = u || {}; u.id = id; u.partners = arr(u.partners); u.children = arr(u.children); for (const f of ['married', 'place', 'ended', 'endDate', 'notes']) if (typeof u[f] !== 'string') u[f] = u[f] == null ? '' : String(u[f]); return u; }
+function normTree(t) {
+  t = t || {}; t.meta = t.meta || {}; t.people = t.people || {}; t.unions = t.unions || {}; t.log = t.log || {};
+  for (const id in t.people) t.people[id] = normPerson(t.people[id], id);
+  for (const id in t.unions) t.unions[id] = normUnion(t.unions[id], id);
+  if (!t.people[t.root]) t.root = Object.keys(t.people)[0] || null;
+  return t;
+}
+
+/* ---------- indexes ---------- */
+function reindex() {
+  const P = T.people, U = T.unions;
+  IX.parentU = {}; IX.unionsOf = {}; IX.branch = {}; IX.depth = {}; IX.blood = new Set();
+  for (const id in P) IX.unionsOf[id] = [];
+  for (const u of Object.values(U)) {
+    u.partners = u.partners.filter(p => P[p]); u.children = u.children.filter(c => P[c]);
+    for (const p of u.partners) IX.unionsOf[p].push(u.id);
+    for (const c of u.children) if (!IX.parentU[c]) IX.parentU[c] = u.id;
+  }
+  // chart root: climb from T.root through the first parent while there is one
+  let r = T.root, guard = 0;
+  while (r && IX.parentU[r] && guard++ < 50) { const pu = U[IX.parentU[r]]; if (!pu.partners.length) break; r = pu.partners[0]; }
+  IX.root = r;
+  IX.top = [];
+  if (!r) return;
+  const seen = new Set();
+  const walk = (pid, d, b) => {
+    if (seen.has(pid)) return; seen.add(pid);
+    IX.blood.add(pid); IX.depth[pid] = d; IX.branch[pid] = b;
+    for (const uid of IX.unionsOf[pid]) {
+      const u = U[uid];
+      for (const s of u.partners) if (s !== pid && IX.branch[s] === undefined) { IX.branch[s] = b; IX.depth[s] = d; }
+      u.children.forEach(c => walk(c, d + 1, d === 0 ? (IX.top.push(c), IX.top.length - 1) : b));
+    }
+  };
+  walk(r, 0, -1);
+  for (const uid of IX.unionsOf[r]) for (const s of U[uid].partners) IX.branch[s] = -1;
+}
+const unionsOf = pid => (IX.unionsOf[pid] || []).map(u => T.unions[u]);
+const spousesIn = (u, pid) => u.partners.filter(p => p !== pid);
+const spouses = pid => unionsOf(pid).flatMap(u => spousesIn(u, pid));
+const childrenOf = pid => unionsOf(pid).flatMap(u => u.children);
+const parentsOf = pid => { const u = T.unions[IX.parentU[pid]]; return u ? u.partners : []; };
+const parentUnion = pid => T.unions[IX.parentU[pid]] || null;
+function siblingsOf(pid) {
+  const mine = parentsOf(pid), out = [];
+  const seen = new Set([pid]);
+  for (const par of mine) for (const u of unionsOf(par)) for (const c of u.children) {
+    if (seen.has(c)) continue; seen.add(c);
+    const theirs = parentsOf(c); const full = mine.length > 1 && mine.every(m => theirs.includes(m)) || (mine.length === 1 && theirs.length === 1);
+    out.push({ id: c, half: !full });
+  }
+  return out;
+}
+
+/* ---------- names & dates ---------- */
+const P = id => T.people[id];
+function shortName(p) { if (typeof p === 'string') p = P(p); if (!p) return '?'; return [p.given || '(no name)', p.surname].filter(Boolean).join(' '); }
+function fullName(p) {
+  if (typeof p === 'string') p = P(p); if (!p) return '?';
+  let s = [p.given, p.middle, p.surname].filter(Boolean).join(' ') || '(no name)';
+  if (p.nick) s = s.replace(p.given, `${p.given} “${p.nick}”`);
+  if (p.birthSurname && p.birthSurname !== p.surname) s += ` (born ${p.birthSurname})`;
+  return s;
+}
+const initials = p => ((p.given || '?')[0] + (p.surname ? p.surname[0] : '')).toUpperCase();
+function yearOf(s) { const m = String(s || '').match(/\b(1[5-9]\d\d|20\d\d)\b/); return m ? +m[1] : null; }
+function lifeYears(p) {
+  if (typeof p === 'string') p = P(p);
+  const b = yearOf(p.birth), d = yearOf(p.death);
+  if (b && d) return `${b}–${d}`; if (b) return p.deceased ? `${b}–?` : `b. ${b}`; if (d) return `d. ${d}`;
+  return p.deceased ? '†' : '';
+}
+function age(p) {
+  const bd = Date.parse(p.birth); if (isNaN(bd) || !/\d{4}/.test(p.birth) || !/[a-z]|-/i.test(p.birth)) return null;
+  const end = p.deceased ? Date.parse(p.death) : Date.now(); if (isNaN(end)) return null;
+  return Math.floor((end - bd) / 31557600000);
+}
+function sexWord(p, f, m, n) { return p.sex === 'F' ? f : p.sex === 'M' ? m : n; }
+function context(pid) {
+  const p = P(pid); const par = parentsOf(pid);
+  if (par.length) return `${sexWord(p, 'daughter', 'son', 'child')} of ${par.map(x => P(x).given).join(' & ')}${par.length === 1 ? ' ' + (P(par[0]).surname || '') : ''}`.trim();
+  const sp = spouses(pid);
+  if (sp.length) return `married to ${sp.map(shortName).join(', ')}`;
+  return '';
+}
+
+/* ---------- relationships ---------- */
+function ancestorsMap(pid) { // id -> {d, via: next id towards pid}
+  const m = new Map([[pid, { d: 0, via: null }]]); const q = [pid];
+  while (q.length) { const x = q.shift(); const d = m.get(x).d; for (const par of parentsOf(x)) if (!m.has(par)) { m.set(par, { d: d + 1, via: x }); q.push(par); } }
+  return m;
+}
+const ORD = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
+const TIMES = ['', 'once', 'twice', 'three times', 'four times', 'five times', 'six times'];
+const greats = n => n <= 0 ? '' : n === 1 ? 'great-' : n === 2 ? 'great-great-' : `${n}×great-`;
+function bloodTerm(a, b, da, db, half) { // what b is to a
+  const B = P(b);
+  if (da === 0 && db === 0) return 'self';
+  if (da === 0) { // b descends from a
+    if (db === 1) return sexWord(B, 'daughter', 'son', 'child');
+    return greats(db - 2) + 'grand' + sexWord(B, 'daughter', 'son', 'child');
+  }
+  if (db === 0) {
+    if (da === 1) return sexWord(B, 'mother', 'father', 'parent');
+    return greats(da - 2) + 'grand' + sexWord(B, 'mother', 'father', 'parent');
+  }
+  if (da === 1 && db === 1) return (half ? 'half-' : '') + sexWord(B, 'sister', 'brother', 'sibling');
+  if (da === 1) return greats(db - 2) + sexWord(B, 'niece', 'nephew', 'niece or nephew');
+  if (db === 1) return greats(da - 2) + sexWord(B, 'aunt', 'uncle', 'aunt or uncle');
+  const deg = Math.min(da, db) - 1, rem = Math.abs(da - db);
+  return `${ORD[deg] || deg + 'th'} cousin${rem ? ' ' + (TIMES[rem] || rem + ' times') + ' removed' : ''}`;
+}
+function bloodRel(a, b) {
+  if (a === b) return { term: 'self', path: [] };
+  const A = ancestorsMap(a), Bm = ancestorsMap(b);
+  let best = null;
+  for (const [x, ia] of A) if (Bm.has(x)) { const ib = Bm.get(x); const s = ia.d + ib.d; if (!best || s < best.s) best = { x, s, da: ia.d, db: ib.d }; }
+  if (!best) return null;
+  const commons = [...A.keys()].filter(x => Bm.has(x) && A.get(x).d === best.da && Bm.get(x).d === best.db);
+  const half = best.da === 1 && best.db === 1 && !(parentsOf(a).length > 1 && parentsOf(a).every(x => parentsOf(b).includes(x)));
+  return { term: bloodTerm(a, b, best.da, best.db, half), common: commons, da: best.da, db: best.db, pathA: chainUp(A, a, best.x), pathB: chainUp(Bm, b, best.x) };
+}
+function chainUp(M, from, top) { const out = []; let x = top; while (x && x !== from) { x = M.get(x).via; if (x) out.push(x); } return out.reverse().filter(x => x !== top); }
+const IN_LAW = { sister: 'sister-in-law', brother: 'brother-in-law', sibling: 'sibling-in-law', daughter: 'daughter-in-law', son: 'son-in-law', child: 'child-in-law', mother: 'mother-in-law', father: 'father-in-law', parent: 'parent-in-law' };
+// What is b to a?  -> {kind, term, via, r}; use describeRel() to turn it into words.
+function relationship(a, b) {
+  if (!a || !b || !P(a) || !P(b)) return null;
+  if (a === b) return { kind: 'self', term: 'self' };
+  if (spouses(a).includes(b)) { const u = unionsOf(a).find(u => u.partners.includes(b)); return { kind: 'spouse', term: (u && u.ended ? 'former ' : '') + sexWord(P(b), 'wife', 'husband', 'spouse') }; }
+  const r = bloodRel(a, b);
+  if (r) return { kind: 'blood', term: r.term, r };
+  for (const s of spouses(b)) { const x = bloodRel(a, s); if (x) { const sib = /sister|brother|sibling/.test(x.term); const il = (x.da === 1 && x.db === 1) || (x.da === 0 && x.db === 1) ? IN_LAW[sexWord(P(b), sib ? 'sister' : 'daughter', sib ? 'brother' : 'son', sib ? 'sibling' : 'child')] : null; let t2 = il; if (!t2 && x.da >= 2 && x.db === 1) t2 = greats(x.da - 2) + sexWord(P(b), 'aunt', 'uncle', 'aunt or uncle') + ' by marriage'; if (!t2 && x.da === 1 && x.db >= 2) t2 = greats(x.db - 2) + sexWord(P(b), 'niece', 'nephew', 'niece or nephew') + ' by marriage'; if (!t2 && x.da === 0 && x.db >= 2) t2 = greats(x.db - 2) + 'grand' + sexWord(P(b), 'daughter', 'son', 'child') + '-in-law'; if (!t2 && x.db === 0 && x.da >= 1) t2 = 'step-' + greats(x.da - 2) + (x.da >= 2 ? 'grand' : '') + sexWord(P(b), 'mother', 'father', 'parent'); return { kind: 'spouse-of', term: t2, spouseWord: sexWord(P(b), 'wife', 'husband', 'spouse'), via: s, r: x }; } }
+  for (const s of spouses(a)) { const x = bloodRel(s, b); if (x) { const sib = /sister|brother|sibling/.test(x.term); const il = (x.da === 1 && x.db === 1) || (x.da === 1 && x.db === 0) ? IN_LAW[sexWord(P(b), sib ? 'sister' : 'mother', sib ? 'brother' : 'father', sib ? 'sibling' : 'parent')] : null; return { kind: 'via-spouse', term: il, via: s, r: x }; } }
+  return { kind: 'none', term: '' };
+}
+function describeRel(rel, owner) { // owner: "your" or "Mark’s"
+  if (!rel) return '';
+  switch (rel.kind) {
+    case 'self': return 'the same person';
+    case 'spouse': case 'blood': return `${owner} ${rel.term}`;
+    case 'spouse-of': return rel.term ? `${owner} ${rel.term}` : `the ${rel.spouseWord} of ${owner} ${rel.r.term}`;
+    case 'via-spouse': return rel.term ? `${owner} ${rel.term}` : `${owner} spouse’s ${rel.r.term}`;
+    default: return 'not related through this tree (yet!)';
+  }
+}
+function relToMe(pid) {
+  const me = LS.get('me'); if (!me || !P(me) || !P(pid)) return '';
+  if (me === pid) return 'you';
+  const r = relationship(me, pid); return r && r.kind !== 'none' ? describeRel(r, 'your') : '';
+}
+
+/* ================================================================
+   Storage.  Local: everything in localStorage.  Shared: a Firebase
+   Realtime Database (REST + live stream). Anyone with the link can
+   view and edit; the secret key in the link is the only "password".
+   ================================================================ */
+let conn = LS.get('conn');            // {db:"https://x.firebaseio.com", key:"…"}
+let pending = LS.get('pending', []);  // writes not yet confirmed by the server
+let es = null, flushing = false, retryT = null, online = false;
+const base = () => `${conn.db}/trees/${conn.key}`;
+const url = path => path ? `${base()}/${path}.json` : `${base()}.json`;
+const PUBLIC_URL = 'https://adambsilverman.github.io/Goldstein-Family-Tree/';
+const shareLink = () => `${location.protocol === 'file:' ? PUBLIC_URL : location.origin + location.pathname}#join=${encodeURIComponent(conn.db.replace(/^https:\/\//, ''))}/${conn.key}`;
+const dbFromLink = s => { s = decodeURIComponent(s); return /^https?:\/\//.test(s) ? s : 'https://' + s; };
+const who = () => { const me = LS.get('me'); return me && P(me) ? shortName(me) : (LS.get('who') || 'someone'); };
+
+function saveLocal() {
+  const ok = LS.set(conn ? 'cache.' + conn.key : 'tree', T);
+  if (!ok) toast('This browser is out of storage space — download a backup from the ☰ menu.');
+}
+function persist(changes) {
+  if (!conn) { saveLocal(); return; }
+  for (const c of changes) {
+    if (c.k === 'log') { pending.push({ path: 'log/' + c.id, v: c.v }); continue; }
+    pending.push({ path: `${c.k}/${c.id}`, v: c.v });
+  }
+  LS.set('pending', pending); saveLocal(); flush();
+}
+async function flush() {
+  if (!conn || flushing) return;
+  flushing = true; clearTimeout(retryT);
+  while (pending.length) {
+    setStatus('busy');
+    const c = pending[0];
+    try {
+      const r = await fetch(url(c.path), c.v == null ? { method: 'DELETE' } : { method: 'PUT', body: JSON.stringify(c.v) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      pending.shift(); LS.set('pending', pending);
+    } catch (e) {
+      flushing = false; setStatus('off');
+      retryT = setTimeout(flush, 8000); return;
+    }
+  }
+  flushing = false; setStatus(online ? 'live' : 'busy');
+}
+async function fetchShared() {
+  const r = await fetch(url('')); if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function openStream() {
+  if (es) es.close();
+  es = new EventSource(url(''));
+  const onEv = merge => e => {
+    online = true; let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+    if (!m) return; applyRemote(m.path, m.data, merge);
+  };
+  es.addEventListener('put', onEv(false));
+  es.addEventListener('patch', onEv(true));
+  es.addEventListener('keep-alive', () => { online = true; if (!pending.length) setStatus('live'); });
+  es.addEventListener('cancel', () => { setStatus('off'); toast('The shared tree refused access. Check the link.'); });
+  es.onopen = () => { online = true; setStatus(pending.length ? 'busy' : 'live'); flush(); };
+  es.onerror = () => { online = false; setStatus('off'); };
+}
+function applyRemote(path, data, merge) {
+  const seg = path.split('/').filter(Boolean);
+  if (!seg.length) {
+    if (merge) { for (const k in data) applyRemote('/' + k, data[k], false); return; }
+    if (data == null) { if (T) { toast('The shared tree is empty — uploading this copy.'); uploadAll(); } return; }
+    T = normTree(data);
+    for (const c of pending) setAt(c.path.split('/'), c.v); // keep my unsent edits on top
+  } else if (merge) { for (const k in data) setAt([...seg, k], data[k]); }
+  else setAt(seg, data);
+  for (const k of ['people', 'unions']) for (const id in T[k]) T[k][id] = k === 'people' ? normPerson(T[k][id], id) : normUnion(T[k][id], id);
+  saveLocal(); afterChange(true);
+}
+function setAt(seg, v) {
+  if (seg[0] === 'root' || seg[0] === 'meta' && seg.length === 1) { T[seg[0]] = v; return; }
+  let o = T;
+  for (let i = 0; i < seg.length - 1; i++) { if (o[seg[i]] == null || typeof o[seg[i]] !== 'object') o[seg[i]] = {}; o = o[seg[i]]; }
+  const last = seg[seg.length - 1];
+  if (v == null) delete o[last]; else o[last] = v;
+}
+async function uploadAll() {
+  const body = clone(T);
+  const r = await fetch(url(''), { method: 'PUT', body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+let statusNow = 'local';
+function setStatus(s) {
+  statusNow = conn ? s : 'local';
+  const dot = $('#syncDot'), lbl = $('#syncLbl');
+  dot.className = 'dot ' + ({ live: 'live', busy: 'busy', off: 'off' }[statusNow] || '');
+  lbl.textContent = { local: 'On this device', live: 'Live · shared', busy: 'Saving…', off: pending.length ? `Offline · ${pending.length} waiting` : 'Reconnecting…' }[statusNow];
+}
+
+/* ---------- making changes ---------- */
+const undoStack = [];
+function commit(changes, label, opts = {}) {
+  changes = changes.filter(Boolean);
+  if (!changes.length) return;
+  const before = changes.map(c => ({ k: c.k, id: c.id, v: clone(T[c.k][c.id]) ?? null }));
+  for (const c of changes) {
+    if (c.v == null) delete T[c.k][c.id];
+    else T[c.k][c.id] = c.k === 'people' ? normPerson(clone(c.v), c.id) : normUnion(clone(c.v), c.id);
+  }
+  if (opts.undo !== false) { undoStack.push({ label, changes: before }); if (undoStack.length > 60) undoStack.shift(); }
+  const lid = Date.now().toString(36) + rid('', 4);
+  const entry = { t: Date.now(), who: who(), msg: label };
+  T.log[lid] = entry;
+  const logKeys = Object.keys(T.log); if (!conn && logKeys.length > 300) for (const k of logKeys.slice(0, logKeys.length - 300)) delete T.log[k];
+  persist([...changes.map(c => ({ k: c.k, id: c.id, v: T[c.k][c.id] ?? null })), { k: 'log', id: lid, v: entry }]);
+  afterChange();
+  if (opts.toast !== false) toast(label, undoStack.length && opts.undo !== false ? 'Undo' : null, undo);
+}
+function undo() {
+  const u = undoStack.pop(); if (!u) return;
+  commit(u.changes.map(c => ({ k: c.k, id: c.id, v: c.v })), 'Undid: ' + u.label, { undo: false });
+}
+const putP = p => ({ k: 'people', id: p.id, v: p });
+const putU = u => ({ k: 'unions', id: u.id, v: u });
+const delP = id => ({ k: 'people', id, v: null });
+const delU = id => ({ k: 'unions', id, v: null });
+function newPerson(f = {}) { return normPerson({ given: '', surname: '', ...f }, rid('p')); }
+function newUnion(partners, children = []) { return normUnion({ partners, children }, rid('u')); }
+
+/* ================================================================
+   Views: tree chart, fan, family, list, related, timeline, help
+   ================================================================ */
+const state = { view: LS.get('view', 'tree'), sel: null, hist: [], collapsed: null, panel: null };
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+/* ---------- pan & zoom for the two chart views ---------- */
+function Viewport(svg, g) {
+  let k = 1, x = 0, y = 0;
+  const pts = new Map(); let last = null;
+  const apply = () => g.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
+  const zoomAt = (f, cx, cy) => { const nk = Math.min(4, Math.max(0.04, k * f)); f = nk / k; x = cx - (cx - x) * f; y = cy - (cy - y) * f; k = nk; apply(); };
+  const local = e => { const r = svg.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  svg.addEventListener('wheel', e => { e.preventDefault(); const [cx, cy] = local(e); zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0022)), cx, cy); }, { passive: false });
+  svg.addEventListener('pointerdown', e => { pts.set(e.pointerId, local(e)); moved = false; last = null; svg.classList.add('drag'); });
+  window.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    const p = local(e), prev = pts.get(e.pointerId); pts.set(e.pointerId, p);
+    if (pts.size === 1) { const dx = p[0] - prev[0], dy = p[1] - prev[1]; if (Math.abs(dx) + Math.abs(dy) > 0) { x += dx; y += dy; apply(); } }
+    else if (pts.size === 2) {
+      const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (last) { x += c[0] - last.c[0]; y += c[1] - last.c[1]; zoomAt(d / last.d, c[0], c[1]); }
+      last = { d, c };
+    }
+  });
+  let downAt = null;
+  svg.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) last = null; if (!pts.size) svg.classList.remove('drag'); };
+  window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  // swallow the click that ends a drag
+  svg.addEventListener('click', e => { if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) { e.stopPropagation(); e.preventDefault(); } }, true);
+  return {
+    fit(pad = 30, maxK = 1.2) {
+      const bb = g.getBBox(); const r = svg.getBoundingClientRect(); if (!bb.width || !r.width) return;
+      k = Math.min(maxK, (r.width - pad * 2) / bb.width, (r.height - pad * 2) / bb.height);
+      x = (r.width - bb.width * k) / 2 - bb.x * k; y = (r.height - bb.height * k) / 2 - bb.y * k; apply();
+    },
+    center(px, py, nk) { const r = svg.getBoundingClientRect(); if (nk) k = nk; x = r.width / 2 - px * k; y = r.height / 2 - py * k; apply(); },
+    zoom(f) { const r = svg.getBoundingClientRect(); zoomAt(f, r.width / 2, r.height / 2); },
+    get k() { return k; }
+  };
+}
+function el(tag, attrs = {}, parent) { const e = document.createElementNS(SVGNS, tag); for (const a in attrs) e.setAttribute(a, attrs[a]); if (parent) parent.appendChild(e); return e; }
+
+function legendHTML() {
+  return IX.top.map((id, i) => `<span><i style="background:var(${BR[i % BR.length]})"></i>${esc(P(id).given)}</span>`).join('');
+}
+
+/* ---------- TREE (left-to-right descendant chart) ---------- */
+let treeVP, treeLayout = null, treeFitted = false;
+function defaultCollapsed() { const c = new Set(); for (const id of IX.blood) if (IX.depth[id] >= 2 && childrenOf(id).length) c.add(id); return c; }
+function layoutTree() {
+  const W = 210, COLW = 260, GAP = 10, nodes = [], links = [];
+  const colBottom = {}; let cursor = 0;
+  const nodeH = pid => 44 + 16 * spouses(pid).length;
+  const seen = new Set();
+  const walk = (pid, d) => {
+    seen.add(pid);
+    const kids = childrenOf(pid).filter(c => !seen.has(c));
+    const n = { id: pid, d, x: d * COLW, w: W, h: nodeH(pid), nk: kids.length, kids: [] };
+    if (!kids.length || state.collapsed.has(pid)) {
+      n.y = Math.max(cursor, colBottom[d] ?? -1e9);
+    } else {
+      n.kids = kids.map(c => walk(c, d + 1));
+      const a = n.kids[0], b = n.kids[n.kids.length - 1];
+      n.y = Math.max(((a.y + a.h / 2) + (b.y + b.h / 2)) / 2 - n.h / 2, colBottom[d] ?? -1e9);
+    }
+    colBottom[d] = n.y + n.h + GAP; cursor = Math.max(cursor, n.y + n.h + GAP);
+    nodes.push(n);
+    for (const c of n.kids) links.push([n, c]);
+    return n;
+  };
+  if (IX.root) walk(IX.root, 0);
+  return { nodes, links, byId: Object.fromEntries(nodes.map(n => [n.id, n])) };
+}
+function renderTree() {
+  if (!state.collapsed) state.collapsed = new Set(LS.get('collapsed') || [...defaultCollapsed()]);
+  const g = $('#treeG'); g.textContent = '';
+  const L = treeLayout = layoutTree();
+  const me = LS.get('me');
+  const lg = el('g', {}, g);
+  for (const [a, b] of L.links) {
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2, mx = x1 + 22;
+    el('path', { class: 'link', d: `M${x1},${y1}H${mx}V${y2}H${x2}`, stroke: brColor(b.id) }, lg);
+  }
+  for (const n of L.nodes) {
+    const p = P(n.id);
+    const ng = el('g', { class: 'node' + (n.id === state.sel ? ' sel' : '') + (n.id === me ? ' me' : ''), transform: `translate(${n.x},${n.y})`, 'data-id': n.id, tabindex: 0, role: 'button', 'aria-label': fullName(p) }, g);
+    el('rect', { class: 'box', width: n.w, height: n.h, rx: 10 }, ng);
+    el('rect', { width: 6, height: n.h, rx: 3, fill: brColor(n.id) }, ng);
+    if (p.photo) { const cp = 'c' + n.id; const defs = el('defs', {}, ng); const c = el('clipPath', { id: cp }, defs); el('circle', { cx: n.w - 22, cy: 22, r: 15 }, c); el('image', { href: p.photo, x: n.w - 37, y: 7, width: 30, height: 30, 'clip-path': `url(#${cp})`, preserveAspectRatio: 'xMidYMid slice' }, ng); }
+    const t = el('text', { class: 'nm', x: 16, y: 20 }, ng); t.textContent = trunc(shortName(p) + (p.nick ? ` (${p.nick})` : ''), p.photo ? 21 : 25);
+    const yr = el('text', { class: 'yr', x: 16, y: 36 }, ng); yr.textContent = [lifeYears(p), n.id === me ? '★ you' : ''].filter(Boolean).join('  ');
+    spouses(n.id).forEach((s, i) => { const st = el('text', { class: 'sp', x: 16, y: 54 + i * 16 }, ng); st.textContent = trunc('& ' + shortName(s) + (lifeYears(s) ? ' ' + lifeYears(s) : ''), 29); });
+    if (p.parentsUncertain) { const q = el('text', { class: 'unc', x: n.w - 14, y: n.h - 8 }, ng); q.textContent = '?'; el('title', {}, q).textContent = 'Which marriage is this person from? See “Fill in the gaps”.'; }
+    if (n.nk) {
+      const tg = el('g', { class: 'tg', transform: `translate(${n.w},${n.h / 2})`, 'data-toggle': n.id, role: 'button', 'aria-label': state.collapsed.has(n.id) ? 'Show children' : 'Hide children' }, ng);
+      el('circle', { r: 11 }, tg);
+      const tt = el('text', { y: 4 }, tg); tt.textContent = state.collapsed.has(n.id) ? '+' + countDesc(n.id) : '−';
+      if (state.collapsed.has(n.id)) tt.setAttribute('font-size', '9.5');
+    }
+  }
+  $('#legend1').innerHTML = legendHTML();
+  $('#treeMe').hidden = !(me && IX.blood.has(me));
+}
+const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+function countDesc(pid) { let n = 0; const st = [pid], seen = new Set(); while (st.length) { const x = st.pop(); for (const c of childrenOf(x)) if (!seen.has(c)) { seen.add(c); n++; st.push(c); } } return n; }
+function saveCollapsed() { LS.set('collapsed', [...state.collapsed]); }
+function fitTreeNice() {
+  treeVP.fit(30, 1);
+  if (treeVP.k < 0.8 && treeLayout && treeLayout.byId[IX.root]) { const n = treeLayout.byId[IX.root]; const r = $('#treeSvg').getBoundingClientRect(); treeVP.center(n.x + (r.width / 2 - 40) / 0.85, n.y + n.h / 2, 0.85); }
+}
+function revealInTree(pid) {
+  if (!state.collapsed) state.collapsed = defaultCollapsed();
+  let x = pid, g = 0; while (IX.parentU[x] && g++ < 60) { const par = parentsOf(x).find(p => IX.blood.has(p)) || parentsOf(x)[0]; if (!par) break; state.collapsed.delete(par); x = par; }
+  // spouses aren't drawn as their own box: show their partner instead
+  let target = pid; if (!IX.blood.has(pid)) { const s = spouses(pid).find(s => IX.blood.has(s)); if (s) { target = s; revealInTree(s); return target; } }
+  saveCollapsed(); return target;
+}
+function focusTree(pid) {
+  const target = revealInTree(pid);
+  state.sel = pid; show('tree');
+  requestAnimationFrame(() => {
+    const n = treeLayout && treeLayout.byId[target]; if (!n) return;
+    treeVP.center(n.x + n.w / 2, n.y + n.h / 2, Math.max(treeVP.k, 0.9));
+    const node = $(`#treeG .node[data-id="${target}"]`); if (node) { node.classList.add('flash'); setTimeout(() => node.classList.remove('flash'), 3300); }
+  });
+}
+
+/* ---------- FAN (radial descendant chart) ---------- */
+let fanVP, fanFitted = false;
+function renderFan() {
+  const g = $('#fanG'); g.textContent = '';
+  if (!IX.root) return;
+  const leaves = {}, seen = new Set();
+  const count = pid => { seen.add(pid); const k = childrenOf(pid).filter(c => !seen.has(c)); leaves[pid] = k.length ? k.reduce((s, c) => s + count(c), 0) : 1; return leaves[pid]; };
+  const total = count(IX.root);
+  const R = 165, SWEEP = Math.PI * 2 * 0.97, START = -Math.PI / 2 + (Math.PI * 2 - SWEEP) / 2 + Math.PI;
+  const pos = {}, me = LS.get('me');
+  const seen2 = new Set();
+  const place = (pid, d, a0, a1) => {
+    seen2.add(pid);
+    const a = (a0 + a1) / 2; pos[pid] = { d, a, r: d * R };
+    let cur = a0;
+    for (const c of childrenOf(pid)) { if (seen2.has(c)) continue; const span = (a1 - a0) * leaves[c] / leaves[pid]; place(c, d + 1, cur, cur + span); cur += span; }
+  };
+  place(IX.root, 0, START, START + SWEEP);
+  const xy = (r, a) => [r * Math.cos(a), r * Math.sin(a)];
+  const lg = el('g', {}, g);
+  const maxD = Math.max(...Object.values(pos).map(p => p.d));
+  for (let d = 1; d <= maxD; d++) el('circle', { r: d * R, fill: 'none', stroke: '#d9cdb7', 'stroke-dasharray': '2 6', 'stroke-width': 1 }, lg);
+  for (const id in pos) {
+    const par = parentsOf(id).find(p => pos[p]); if (!par) continue;
+    const p0 = pos[par], p1 = pos[id], rm = (p0.r + p1.r) / 2;
+    const [x0, y0] = xy(p0.r, p0.a), [c1x, c1y] = xy(rm, p0.a), [c2x, c2y] = xy(rm, p1.a), [x1, y1] = xy(p1.r, p1.a);
+    el('path', { class: 'link', d: p0.r ? `M${x0},${y0}C${c1x},${c1y} ${c2x},${c2y} ${x1},${y1}` : `M0,0L${x1},${y1}`, stroke: brColor(id), 'stroke-width': p1.d === 1 ? 3 : 1.6 }, lg);
+  }
+  for (const id in pos) {
+    const p = pos[id], pp = P(id); if (!p.d) continue;
+    const [x, y] = xy(p.r, p.a); const deg = p.a * 180 / Math.PI; const flip = Math.cos(p.a) < 0;
+    el('circle', { class: 'n', cx: x, cy: y, r: p.d === 1 ? 8 : 5, fill: brColor(id), 'data-id': id }, g);
+    const t = el('text', { class: 'lbl' + (p.d === 1 ? ' d1' : '') + (id === state.sel ? ' sel' : '') + (id === me ? ' me' : ''), 'data-id': id, transform: `translate(${x},${y}) rotate(${flip ? deg + 180 : deg})`, x: flip ? -11 : 11, y: 4, 'text-anchor': flip ? 'end' : 'start' }, g);
+    t.textContent = (id === me ? '★ ' : '') + trunc(p.d === 1 ? pp.given : shortName(pp), p.d === 1 ? 20 : 22);
+    el('title', {}, t).textContent = [fullName(pp), lifeYears(pp), spouses(id).map(s => '& ' + shortName(s)).join(', ')].filter(Boolean).join(' · ');
+  }
+  // centre: the founders
+  const rootNames = [IX.root, ...spouses(IX.root)].map(x => P(x).given);
+  el('circle', { r: 64, fill: 'var(--card)', stroke: 'var(--line)', 'stroke-width': 2, 'data-id': IX.root, style: 'cursor:pointer' }, g);
+  rootNames.slice(0, 3).forEach((n, i, a) => { const t = el('text', { 'text-anchor': 'middle', y: (i - (a.length - 1) / 2) * 22 + 6, 'font-family': 'Fraunces,serif', 'font-size': 18, 'font-weight': 700, 'data-id': IX.root, style: 'cursor:pointer' }, g); t.textContent = (i ? '& ' : '') + n; });
+  $('#legend2').innerHTML = legendHTML();
+}
+
+/* ---------- person avatar & small card ---------- */
+function avatar(p, lg) { p = typeof p === 'string' ? P(p) : p; const bc = brColor(p.id); return `<span class="av${lg ? ' lg' : ''}" style="--bc:${bc};${p.photo ? `background-image:url('${p.photo}')` : ''}">${p.photo ? '' : esc(initials(p))}</span>`; }
+function pcard(id, sub) {
+  const p = P(id); if (!p) return '';
+  const rel = relToMe(id);
+  const line = sub ?? [lifeYears(p), rel ? `<span class="rel">${esc(rel)}</span>` : ''].filter(Boolean).join(' · ');
+  return `<button class="pc" data-go="${id}" style="--bc:${brColor(id)}">${avatar(p)}<span class="t"><b>${esc(shortName(p))}${p.nick ? ` <span class="muted">(${esc(p.nick)})</span>` : ''}</b><small>${line || '&nbsp;'}</small></span></button>`;
+}
+function unionLabel(u) {
+  const bits = [];
+  if (u.married) bits.push('married ' + esc(u.married) + (u.place ? ' in ' + esc(u.place) : ''));
+  if (u.ended) bits.push(esc(u.ended) + (u.endDate ? ' ' + esc(u.endDate) : ''));
+  return bits.join(' · ');
+}
+
+/* ---------- FAMILY (person-centred) ---------- */
+function goPerson(id, push = true) {
+  if (!P(id)) return;
+  if (push && state.sel && state.sel !== id) { state.hist.push(state.sel); if (state.hist.length > 30) state.hist.shift(); }
+  state.sel = id; LS.set('sel', id);
+  closePanel(); show('family'); $('#v-family').scrollTop = 0;
+}
+function renderFamily() {
+  const pad = $('#famPad');
+  if (!state.sel || !P(state.sel)) state.sel = LS.get('me') && P(LS.get('me')) ? LS.get('me') : IX.root;
+  const id = state.sel, p = P(id); if (!p) { pad.innerHTML = ''; return; }
+  const par = parentsOf(id), pu = parentUnion(id);
+  const gp = par.flatMap(x => parentsOf(x));
+  const sib = siblingsOf(id);
+  const rel = relToMe(id);
+  const ag = age(p);
+  let h = '';
+  if (state.hist.length) h += `<div class="crumbs"><button data-back>← Back</button>${state.hist.slice(-4).map(x => `<span class="muted">›</span><button data-go="${x}">${esc(P(x) ? P(x).given : '?')}</button>`).join('')}</div>`;
+  if (gp.length) h += `<div class="sec">Grandparents</div><div class="row">${gp.map(x => `<button class="chip" data-go="${x}">${esc(shortName(x))} <span class="muted">${esc(lifeYears(x))}</span></button>`).join('')}</div>`;
+  h += `<div class="sec">Parents</div>`;
+  if (par.length) h += `<div class="grid">${par.map(x => pcard(x)).join('')}</div>${pu && unionLabel(pu) ? `<p class="muted" style="margin:6px 2px 0">${unionLabel(pu)}</p>` : ''}`;
+  else h += `<p class="muted">Not recorded. <button class="btn sm" data-act="addParent" data-id="${id}">+ Add a parent</button></p>`;
+  if (p.parentsUncertain) h += uncertainBox(id);
+  h += `<div class="card fam-hero" style="margin-top:16px;border-left:6px solid ${brColor(id)}">${avatar(p, true)}<div style="min-width:0"><h2>${esc(fullName(p))}</h2>
+    <div class="meta">${[p.birth ? `Born ${esc(p.birth)}${p.birthPlace ? ', ' + esc(p.birthPlace) : ''}` : p.birthPlace ? 'Born in ' + esc(p.birthPlace) : '',
+      p.deceased ? (p.death ? `Died ${esc(p.death)}${p.deathPlace ? ', ' + esc(p.deathPlace) : ''}` : 'Deceased') : '',
+      ag != null ? (p.deceased ? `aged ${ag}` : `${ag} years old`) : ''].filter(Boolean).join(' · ') || '<span class="muted">No dates yet</span>'}</div>
+    ${rel ? `<div style="margin-top:6px"><span class="badge me">${esc(rel)}</span></div>` : ''}
+    ${p.notes ? `<p style="margin:8px 0 0;white-space:pre-wrap">${esc(p.notes)}</p>` : ''}</div>
+    <div class="acts row"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-act="tree" data-id="${id}">🌳 Show in tree</button>${LS.get('me') !== id ? `<button class="btn" data-act="relate" data-id="${id}">🔗 How related?</button>` : ''}</div></div>`;
+  const us = unionsOf(id);
+  h += `<div class="sec">${us.length > 1 ? 'Marriages & partners' : 'Spouse / partner'}</div>`;
+  if (!us.length) h += `<p class="muted">None recorded.</p>`;
+  for (const u of us) {
+    const sp = spousesIn(u, id);
+    h += `<div class="card union">${sp.length ? `<div class="grid" style="margin-bottom:10px">${sp.map(s => pcard(s)).join('')}</div>` : ''}
+      ${unionLabel(u) ? `<p class="muted" style="margin:0 0 8px">${unionLabel(u)}</p>` : ''}
+      <h4>${u.children.length ? `Children${sp.length ? ' with ' + esc(sp.map(s => P(s).given).join(' & ')) : ''} <span class="badge">${u.children.length}</span>` : '<span class="muted" style="font-weight:400">No children recorded</span>'}</h4>
+      ${u.children.length ? `<div class="grid">${u.children.map(c => pcard(c)).join('')}</div>` : ''}
+      <div class="row" style="margin-top:10px"><button class="btn sm" data-act="addChild" data-u="${u.id}">+ Add a child</button></div></div>`;
+  }
+  h += `<div class="row"><button class="btn sm" data-act="addSpouse" data-id="${id}">+ Add a spouse / partner</button>${pu ? `<button class="btn sm" data-act="addChild" data-u="${pu.id}">+ Add a brother or sister</button>` : ''}</div>`;
+  if (sib.length) h += `<div class="sec">Brothers & sisters</div><div class="grid">${sib.map(s => pcard(s.id, [lifeYears(s.id), s.half ? 'half-sibling' : ''].filter(Boolean).join(' · '))).join('')}</div>`;
+  pad.innerHTML = h;
+}
+function uncertainBox(id) {
+  const par = parentsOf(id); const blood = par.find(x => IX.blood.has(x)) || par[0];
+  if (!blood) return '';
+  const opts = unionsOf(blood);
+  return `<div class="warnbox"><b>Which marriage is ${esc(P(id).given)} from?</b> ${esc(P(blood).given)} married more than once and the original tree doesn’t say. If you know, tap one:
+    <div class="row" style="margin-top:8px">${opts.map(u => `<button class="btn sm" data-act="setParents" data-id="${id}" data-u="${u.id}">${esc(u.partners.map(x => P(x).given + (P(x).surname ? ' ' + P(x).surname : '')).join(' & '))}${u.id === IX.parentU[id] ? ' ✓' : ''}</button>`).join('')}</div></div>`;
+}
+
+/* ---------- LIST (outline) ---------- */
+function renderList() {
+  const q = $('#listQ').value.trim().toLowerCase();
+  const match = new Set(), keep = new Set();
+  if (q) for (const id in T.people) { const p = P(id); if ((fullName(p) + ' ' + p.nick).toLowerCase().includes(q)) match.add(id); }
+  if (q) for (const id of match) { let x = id, g = 0; keep.add(x); for (const s of spouses(x)) if (IX.blood.has(s)) keep.add(s); while (IX.parentU[x] && g++ < 60) { const par = parentsOf(x); par.forEach(pp => keep.add(pp)); x = par.find(pp => IX.blood.has(pp)) || par[0]; if (!x) break; } }
+  const hl = s => { s = esc(s); if (!q) return s; const i = s.toLowerCase().indexOf(esc(q)); return i < 0 ? s : s.slice(0, i) + '<mark>' + s.slice(i, i + esc(q).length) + '</mark>' + s.slice(i + esc(q).length); };
+  const seen = new Set();
+  const item = (id, d) => {
+    seen.add(id);
+    if (q && !keep.has(id) && !spouses(id).some(s => match.has(s))) return '';
+    const p = P(id), kids = childrenOf(id).filter(c => !seen.has(c));
+    const sp = spouses(id).map(s => hl(shortName(s)) + (lifeYears(s) ? ` <span class="yr">${lifeYears(s)}</span>` : ''));
+    const inner = kids.map(c => item(c, d + 1)).join('');
+    const open = q ? true : !(state.listClosed || new Set()).has(id) && d < 2;
+    return `<li data-id="${id}"><div class="ln">${kids.length ? `<button class="tw" data-tw="${id}" aria-expanded="${open}">${open ? '▾' : '▸'}</button>` : '<span class="tw"></span>'}
+      <button class="nm${d === 1 ? ' bh' : ''}" data-panel="${id}">${hl(shortName(p))}</button>${p.nick ? `<span class="yr">(${hl(p.nick)})</span>` : ''}<span class="yr">${lifeYears(p)}</span>
+      ${sp.length ? `<span class="sp">m. ${sp.join('; ')}</span>` : ''}${p.parentsUncertain ? ' <span class="badge warn" title="Which marriage?">?</span>' : ''}</div>
+      ${inner ? `<ul${open ? '' : ' hidden'}>${inner}</ul>` : ''}</li>`;
+  };
+  $('#outline').innerHTML = IX.root ? `<ul>${item(IX.root, 0)}</ul>` + (q && !match.size ? '<p class="empty">No one by that name.</p>' : '') : '';
+}
+
+/* ---------- HOW ARE WE RELATED ---------- */
+state.relA = null; state.relB = null;
+function renderRelated() {
+  const pad = $('#relPad');
+  const me = LS.get('me');
+  if (!state.relA || !P(state.relA)) state.relA = me && P(me) ? me : null;
+  const A = state.relA, B = state.relB;
+  let h = `<h2 style="margin:0 0 4px">How are we related?</h2><p class="muted" style="margin:0 0 16px">Pick any two people.</p>
+    <div class="form"><label>First person<div class="pick"><input data-pick="relA" value="${A ? esc(fullName(A)) : ''}" placeholder="Type a name…" autocomplete="off"></div></label>
+    <label>Second person<div class="pick"><input data-pick="relB" value="${B ? esc(fullName(B)) : ''}" placeholder="Type a name…" autocomplete="off"></div></label></div>`;
+  if (A && B && P(A) && P(B)) {
+    const r = relationship(A, B);
+    const owner = `${P(A).given}’s`;
+    let sentence;
+    if (r.kind === 'self') sentence = 'That’s the same person!';
+    else if (r.kind === 'none') sentence = `${esc(shortName(B))} and ${esc(shortName(A))} aren’t connected in this tree yet.`;
+    else sentence = `${esc(shortName(B))} is <span class="rel">${esc(describeRel(r, owner))}</span>.`;
+    h += `<div class="card" style="padding:20px;margin-top:18px"><p class="relbig">${sentence}</p>`;
+    const br = r.r;
+    if (br && br.common && br.common.length) {
+      const top = br.common;
+      const colA = br.pathA, colB = br.pathB;
+      h += `<p class="muted" style="margin:8px 0 0">${br.da && br.db ? 'Closest shared ancestors' : 'Direct line'}: ${esc(top.map(shortName).join(' & '))}${r.kind === 'spouse-of' ? ` · through ${esc(P(r.via).given)}, ${esc(P(B).given)}’s ${esc(sexWord(P(r.via), 'wife', 'husband', 'spouse'))}` : ''}${r.kind === 'via-spouse' ? ` · through ${esc(P(r.via).given)}, ${esc(P(A).given)}’s ${esc(sexWord(P(r.via), 'wife', 'husband', 'spouse'))}` : ''}</p>
+        <div class="ladder"><div class="top"><div class="grid" style="grid-template-columns:repeat(${top.length},1fr)">${top.map(x => pcard(x, lifeYears(x) || 'shared ancestor')).join('')}</div></div>
+        <div class="col">${[...colA].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === br.pathA[0] ? (r.kind === 'via-spouse' ? 'spouse of ' + P(A).given : 'first person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div>
+        <div class="col">${[...colB].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === br.pathB[0] ? (r.kind === 'spouse-of' ? 'spouse of ' + P(B).given : 'second person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div></div>`;
+    }
+    h += `</div>`;
+  } else if (!me) h += `<p class="muted" style="margin-top:18px">Tip: tap <b>🙋 Who are you?</b> at the top and every card will say how that person is related to you.</p>`;
+  pad.innerHTML = h;
+}
+
+/* ---------- TIMELINE ---------- */
+function renderTimeline() {
+  const pad = $('#tlPad');
+  const ppl = Object.values(T.people).map(p => ({ p, b: yearOf(p.birth), d: yearOf(p.death) })).filter(x => x.b);
+  const total = Object.keys(T.people).length;
+  if (ppl.length < 2) {
+    pad.innerHTML = `<div class="empty" style="max-width:560px;margin:0 auto"><h2>The timeline fills in as birth years are added</h2><p>${ppl.length} of ${total} people have a birth year so far. Even a guess like “about 1890” helps.</p><button class="btn primary" data-view-go="help">✍️ Add dates now</button></div>`;
+    return;
+  }
+  ppl.sort((a, b) => a.b - b.b);
+  const now = new Date().getFullYear();
+  const y0 = Math.floor((ppl[0].b - 5) / 10) * 10, y1 = now + 3;
+  const LW = 190, RH = 24, W = Math.max(700, pad.clientWidth - 40), X = y => LW + (y - y0) / (y1 - y0) * (W - LW - 20);
+  let s = `<h2 style="margin:0 0 4px">Timeline</h2><p class="muted" style="margin:0 0 12px">${ppl.length} of ${total} people have a birth year. Tap a name for details.</p><svg class="tl" width="${W}" height="${ppl.length * RH + 40}" style="display:block">`;
+  for (let y = Math.ceil(y0 / 10) * 10; y <= y1; y += 10) s += `<line x1="${X(y)}" x2="${X(y)}" y1="20" y2="${ppl.length * RH + 30}" stroke="${y % 50 ? '#e8dfcf' : '#cfc2aa'}"/><text x="${X(y)}" y="14" text-anchor="middle" fill="#6b6056">${y}</text>`;
+  ppl.forEach((x, i) => {
+    const y = 28 + i * RH, end = x.d || (x.p.deceased ? null : now);
+    s += `<text x="${LW - 8}" y="${y + 12}" text-anchor="end" data-panel="${x.p.id}" style="cursor:pointer">${esc(trunc(shortName(x.p), 26))}</text>`;
+    if (end) s += `<rect x="${X(x.b)}" y="${y + 2}" width="${Math.max(4, X(end) - X(x.b))}" height="14" rx="7" fill="${brColor(x.p.id)}" opacity="${x.d || !x.p.deceased ? .85 : .35}" data-panel="${x.p.id}" style="cursor:pointer"><title>${esc(fullName(x.p))} ${lifeYears(x.p)}</title></rect>`;
+    else s += `<circle cx="${X(x.b)}" cy="${y + 9}" r="6" fill="${brColor(x.p.id)}" data-panel="${x.p.id}"/>`;
+  });
+  pad.innerHTML = s + '</svg>';
+}
+
+/* ---------- FILL IN THE GAPS ---------- */
+state.helpBranch = 'all'; state.helpMissing = true;
+function gaps() {
+  const all = Object.values(T.people);
+  const reach = new Set(IX.blood); for (const id of IX.blood) for (const s of spouses(id)) reach.add(s);
+  return {
+    all, withBirth: all.filter(p => p.birth).length,
+    uncertain: all.filter(p => p.parentsUncertain),
+    orphans: all.filter(p => !reach.has(p.id) && !spouses(p.id).length && !IX.parentU[p.id] && !childrenOf(p.id).length)
+  };
+}
+function renderHelp() {
+  const pad = $('#helpPad'); const G = gaps();
+  const pct = Math.round(100 * G.withBirth / Math.max(1, G.all.length));
+  let h = `<h2 style="margin:0 0 4px">Fill in the gaps</h2><p class="muted" style="margin:0 0 16px">Pass the phone around! Everything you type is saved right away${conn ? ' and everyone sees it' : ''}.</p>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+    <div class="card stat"><b>${G.all.length}</b>people in the tree</div>
+    <div class="card stat"><b>${pct}%</b>have a birth date<div class="bar"><i style="width:${pct}%"></i></div></div>
+    <div class="card stat"><b>${G.uncertain.length}</b>need their parents confirmed</div>
+  </div>`;
+  if (G.uncertain.length) {
+    h += `<div class="sec">Which marriage? (${G.uncertain.length})</div><p class="muted" style="margin-top:0">These parents married more than once. Tap the right couple for each child.</p>`;
+    const byParent = {};
+    for (const p of G.uncertain) { const bl = parentsOf(p.id).find(x => IX.blood.has(x)) || parentsOf(p.id)[0]; (byParent[bl] = byParent[bl] || []).push(p.id); }
+    for (const bl in byParent) {
+      h += `<div class="card" style="padding:12px 14px;margin-bottom:10px"><b>${esc(shortName(bl))}’s children</b> <span class="muted">· ${esc(context(bl))}</span>`;
+      for (const c of byParent[bl]) h += `<div class="row" style="margin-top:8px;justify-content:space-between"><span><button class="nm btn sm" data-panel="${c}" style="border:0;padding:0;background:none;text-decoration:underline">${esc(shortName(c))}</button></span><span class="row">${unionsOf(bl).map(u => `<button class="btn sm" data-act="setParents" data-id="${c}" data-u="${u.id}">with ${esc(spousesIn(u, bl).map(x => shortName(x)).join(' & ') || 'unknown')}</button>`).join('')}</span></div>`;
+      h += `</div>`;
+    }
+  }
+  h += `<div class="sec">Quick dates</div>
+    <div class="row" style="margin-bottom:8px"><select id="hb" class="btn sm">${['<option value="all">Everyone</option>', ...IX.top.map((id, i) => `<option value="${i}"${state.helpBranch == i ? ' selected' : ''}>${esc(P(id).given)}’s branch</option>`)].join('')}</select>
+    <label class="row" style="gap:6px"><input type="checkbox" id="hm"${state.helpMissing ? ' checked' : ''}> only people missing a birth date</label></div>
+    <p class="muted" style="margin-top:0;font-size:.9rem">Any format works: “1931”, “about 1890”, “March 4, 1952”.</p>
+    <div style="overflow-x:auto"><table class="quick"><thead><tr><th>Name</th><th>Born</th><th>Died</th><th></th></tr></thead><tbody>`;
+  const order = []; const seen = new Set(); const walk = id => { if (seen.has(id)) return; seen.add(id); order.push(id); for (const s of spouses(id)) if (!seen.has(s)) { seen.add(s); order.push(s); } for (const c of childrenOf(id)) walk(c); }; if (IX.root) walk(IX.root);
+  for (const id in T.people) if (!seen.has(id)) order.push(id);
+  let shown = 0;
+  for (const id of order) {
+    const p = P(id);
+    if (state.helpBranch !== 'all' && IX.branch[id] != state.helpBranch) continue;
+    if (state.helpMissing && p.birth) continue;
+    if (++shown > 400) break;
+    h += `<tr data-id="${id}"><td><button class="nm" data-panel="${id}" style="border:0;background:none;padding:0;font-weight:700;cursor:pointer;text-align:left">${esc(shortName(p))}</button><br><small class="muted">${esc(context(id))}</small></td>
+      <td><input type="text" data-q="birth" value="${esc(p.birth)}" placeholder="born…" aria-label="Birth date of ${esc(shortName(p))}"></td>
+      <td><input type="text" data-q="death" value="${esc(p.death)}" placeholder="${p.deceased ? 'died…' : '(living)'}" aria-label="Death date of ${esc(shortName(p))}"></td>
+      <td><button class="btn sm" data-act="edit" data-id="${id}" title="More details">✏️</button></td></tr>`;
+  }
+  h += `</tbody></table></div>${shown ? '' : '<p class="empty">Everyone here has a birth date. 🎉</p>'}`;
+  if (G.orphans.length) h += `<div class="sec">Not connected to anyone (${G.orphans.length})</div><div class="grid">${G.orphans.map(p => pcard(p.id, 'tap to connect')).join('')}</div>`;
+  h += `<div class="sec">Recent changes</div>${logHTML(12)}`;
+  pad.innerHTML = h;
+}
+function logHTML(n) {
+  const L = Object.values(T.log || {}).sort((a, b) => b.t - a.t).slice(0, n);
+  if (!L.length) return '<p class="muted">No changes yet.</p>';
+  return `<ul class="log" style="list-style:none;padding:0;margin:0">${L.map(e => `<li><b>${esc(e.who)}</b> ${esc(e.msg.replace(/^./, c => c.toLowerCase()))} <span class="muted">· ${ago(e.t)}</span></li>`).join('')}</ul>`;
+}
+function ago(t) { const s = (Date.now() - t) / 1000; if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago'; if (s < 86400) return Math.floor(s / 3600) + ' h ago'; return new Date(t).toLocaleDateString(); }
+
+/* ---------- side panel (quick look from charts & lists) ---------- */
+function openPanel(id) {
+  if (!P(id)) return;
+  state.panel = id; state.sel = id;
+  const p = P(id), par = parentsOf(id), rel = relToMe(id);
+  $('#panel').innerHTML = `<button class="iconbtn x" data-close aria-label="Close">✕</button>
+    <div style="display:flex;gap:14px;align-items:center;margin:4px 40px 10px 0">${avatar(p, true)}<div><h3 style="margin:0;font-size:1.35rem">${esc(fullName(p))}</h3>
+    <div class="muted">${esc(lifeYears(p)) || 'No dates yet'}</div>${rel ? `<span class="badge me">${esc(rel)}</span>` : ''}</div></div>
+    ${p.birth || p.birthPlace ? `<p style="margin:4px 0">Born ${esc([p.birth, p.birthPlace].filter(Boolean).join(', '))}</p>` : ''}
+    ${p.death || p.deathPlace ? `<p style="margin:4px 0">Died ${esc([p.death, p.deathPlace].filter(Boolean).join(', '))}</p>` : ''}
+    ${p.notes ? `<p style="white-space:pre-wrap">${esc(p.notes)}</p>` : ''}
+    <div class="row" style="margin:12px 0"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-go="${id}">👪 Family</button><button class="btn" data-act="tree" data-id="${id}">🌳 Tree</button></div>
+    ${p.parentsUncertain ? uncertainBox(id) : ''}
+    ${par.length ? `<div class="sec">Parents</div>${par.map(x => pcard(x)).join('')}` : ''}
+    ${spouses(id).length ? `<div class="sec">Spouse / partner</div>${spouses(id).map(x => pcard(x)).join('')}` : ''}
+    ${childrenOf(id).length ? `<div class="sec">Children</div>${childrenOf(id).map(x => pcard(x)).join('')}` : ''}`;
+  $$('#panel .pc').forEach(b => b.style.marginBottom = '6px');
+  $('#panel').classList.add('open');
+  if (state.view === 'tree') renderTree(); if (state.view === 'fan') renderFan();
+}
+function closePanel() { state.panel = null; $('#panel').classList.remove('open'); }
+
+/* ---------- search (header + pickers) ---------- */
+function searchPeople(q, n = 12) {
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const words = q.split(/\s+/);
+  const out = [];
+  for (const id in T.people) {
+    const p = P(id); const hay = (fullName(p) + ' ' + p.nick + ' ' + p.birthSurname).toLowerCase();
+    if (words.every(w => hay.includes(w))) out.push({ id, score: (hay.startsWith(q) ? 0 : 1) + (IX.blood.has(id) ? 0 : .5) + (IX.depth[id] || 0) * .01 });
+  }
+  return out.sort((a, b) => a.score - b.score).slice(0, n).map(x => x.id);
+}
+function attachSearch(input, box, onPick) {
+  let hi = 0, list = [];
+  const draw = () => {
+    list = searchPeople(input.value);
+    box.innerHTML = list.map((id, i) => `<button type="button" role="option" class="${i === hi ? 'hi' : ''}" data-pickid="${id}"><b>${esc(fullName(id))}</b> <span class="muted">${esc(lifeYears(id))}</span><span class="ctx">${esc(context(id) || relToMe(id))}</span></button>`).join('') || (input.value.trim() ? '<p class="muted" style="padding:8px 14px;margin:0">No one by that name.</p>' : '');
+    box.classList.toggle('open', !!input.value.trim()); input.setAttribute('aria-expanded', box.classList.contains('open'));
+  };
+  input.addEventListener('input', () => { hi = 0; draw(); });
+  input.addEventListener('focus', () => { if (input.value.trim()) draw(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { hi = Math.min(hi + 1, list.length - 1); draw(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { hi = Math.max(hi - 1, 0); draw(); e.preventDefault(); }
+    else if (e.key === 'Enter' && list[hi]) { e.preventDefault(); box.classList.remove('open'); onPick(list[hi]); }
+    else if (e.key === 'Escape') box.classList.remove('open');
+  });
+  box.addEventListener('mousedown', e => e.preventDefault());
+  box.addEventListener('click', e => { const b = e.target.closest('[data-pickid]'); if (b) { box.classList.remove('open'); onPick(b.dataset.pickid); } });
+  input.addEventListener('blur', () => setTimeout(() => box.classList.remove('open'), 150));
+}
+
+/* ---------- view switching ---------- */
+function show(v) {
+  if (!T) v = 'welcome';
+  state.view = v; if (v !== 'welcome') LS.set('view', v);
+  $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  $$('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.view === v));
+  render();
+}
+function render() {
+  if (!T) return;
+  const v = state.view;
+  if (v === 'tree') { renderTree(); if (!treeFitted) { treeFitted = true; requestAnimationFrame(() => fitTreeNice()); } }
+  else if (v === 'fan') { renderFan(); if (!fanFitted) { fanFitted = true; requestAnimationFrame(() => fanVP.fit(20, 1)); } }
+  else if (v === 'family') renderFamily();
+  else if (v === 'list') renderList();
+  else if (v === 'related') renderRelated();
+  else if (v === 'timeline') renderTimeline();
+  else if (v === 'help') renderHelp();
+  const n = gaps().uncertain.length; const gn = $('#gapN'); gn.hidden = !n; gn.textContent = n;
+}
+let renderT = null;
+function afterChange(remote) {
+  reindex();
+  $('#title').textContent = T.meta.title || 'Family Tree'; $('#subtitle').textContent = T.meta.subtitle || '';
+  document.title = T.meta.title || 'Family Tree';
+  updateMe(); $('#undoBtn').hidden = !undoStack.length; $('#undoBtn').disabled = !undoStack.length;
+  // don't yank a half-typed quick-date field out from under someone
+  if (remote && state.view === 'help' && document.activeElement && document.activeElement.matches('input[data-q]')) { clearTimeout(renderT); renderT = setTimeout(() => afterChange(true), 1500); return; }
+  if (remote && state.view === 'related' && document.activeElement && document.activeElement.matches('input[data-pick]')) return;
+  render();
+  if (state.panel) { if (P(state.panel)) openPanel(state.panel); else closePanel(); }
+}
+function updateMe() {
+  const me = LS.get('me');
+  $('#meLbl').textContent = me && P(me) ? P(me).given : 'Who are you?';
+}
+
+/* ================================================================
+   Editing, dialogs, sharing, import/export, start-up
+   ================================================================ */
+const dlg = $('#dlg'), dlg2 = $('#dlg2');
+function openDlg(d, html) { d.innerHTML = html; if (!d.open) d.showModal(); const f = d.querySelector('[autofocus]'); if (f) f.focus(); }
+function closeDlg(d) { if (d.open) d.close(); }
+let toastT;
+function toast(msg, btn, fn) {
+  const t = $('#toast'); t.innerHTML = esc(msg) + (btn ? `<button>${esc(btn)}</button>` : '');
+  if (btn) t.querySelector('button').onclick = () => { t.classList.remove('on'); fn(); };
+  t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), btn ? 6000 : 3200);
+}
+function confirmBox(msg, yes = 'Yes', danger) {
+  return new Promise(res => {
+    openDlg(dlg2, `<div class="dh"><h3>Are you sure?</h3></div><div class="db"><p>${msg}</p></div><div class="df"><button class="btn" data-r="0">Cancel</button><button class="btn ${danger ? 'danger' : 'primary'}" data-r="1" autofocus>${esc(yes)}</button></div>`);
+    dlg2.onclick = e => { const b = e.target.closest('[data-r]'); if (b) { closeDlg(dlg2); dlg2.onclick = null; res(b.dataset.r === '1'); } };
+    dlg2.onclose = () => res(false);
+  });
+}
+// pick an existing person, or type a new name -> {id} | {given,surname} | null
+function askPerson(title, hint, opts = {}) {
+  return new Promise(res => {
+    openDlg(dlg2, `<div class="dh"><h3>${esc(title)}</h3><button class="iconbtn" data-r="x" aria-label="Close">✕</button></div>
+      <div class="db">${hint ? `<p class="muted" style="margin-top:0">${hint}</p>` : ''}
+      <div class="form"><label>First name<input id="apG" autofocus autocomplete="off"></label><label>Last name<input id="apS" value="${esc(opts.surname || '')}" autocomplete="off"></label>
+      <label>Born <span style="font-weight:400">(optional)</span><input id="apB" placeholder="e.g. 1931 or 4 Mar 1952"></label>
+      ${opts.sex !== false ? `<label>Sex <span style="font-weight:400">(optional)</span><select id="apX"><option value="">—</option><option value="F">Female</option><option value="M">Male</option><option value="X">Other</option></select></label>` : ''}</div>
+      ${opts.existing !== false ? `<p class="muted" style="margin:16px 0 6px">…or someone already in the tree:</p><div class="search" style="max-width:none"><input id="apQ" placeholder="Search the tree…" autocomplete="off" style="padding-left:14px"><div class="results" id="apR"></div></div>` : ''}</div>
+      <div class="df"><button class="btn" data-r="x">Cancel</button><button class="btn primary" data-r="ok">Add</button></div>`);
+    let done = false; const fin = v => { if (done) return; done = true; dlg2.onclick = null; closeDlg(dlg2); res(v); };
+    if (opts.existing !== false) attachSearch($('#apQ'), $('#apR'), id => fin({ id }));
+    dlg2.onclick = e => { const b = e.target.closest('[data-r]'); if (!b) return; if (b.dataset.r === 'x') fin(null); else { const g = $('#apG').value.trim(); if (!g) { $('#apG').focus(); $('#apG').style.borderColor = '#a3271b'; return; } fin({ given: g, surname: $('#apS').value.trim(), birth: $('#apB').value.trim(), sex: $('#apX') ? $('#apX').value : '' }); } };
+    dlg2.onkeydown = e => { if (e.key === 'Enter' && e.target.matches('#apG,#apS,#apB')) { e.preventDefault(); dlg2.querySelector('[data-r=ok]').click(); } };
+    dlg2.onclose = () => fin(null);
+  });
+}
+function pickPerson(title) {
+  return new Promise(res => {
+    openDlg(dlg2, `<div class="dh"><h3>${esc(title)}</h3><button class="iconbtn" data-r="x" aria-label="Close">✕</button></div><div class="db" style="min-height:300px"><div class="search" style="max-width:none"><input id="ppQ" autofocus placeholder="Type a name…" autocomplete="off" style="padding-left:14px"><div class="results" id="ppR"></div></div></div>`);
+    let done = false; const fin = v => { if (done) return; done = true; closeDlg(dlg2); res(v); };
+    attachSearch($('#ppQ'), $('#ppR'), id => fin(id));
+    dlg2.onclick = e => { if (e.target.closest('[data-r=x]')) fin(null); };
+    dlg2.onclose = () => fin(null);
+  });
+}
+
+/* ---------- connection operations ---------- */
+async function addChild(uid) {
+  const u = T.unions[uid]; if (!u) return;
+  const par = u.partners.map(x => P(x).given).join(' & ');
+  const sur = u.partners.map(x => P(x).surname).find(Boolean) || '';
+  const r = await askPerson(`Add a child of ${par}`, null, { surname: '', existing: true });
+  if (!r) return;
+  if (r.id) {
+    const old = parentUnion(r.id); const ch = [];
+    if (old) ch.push(putU({ ...old, children: old.children.filter(c => c !== r.id) }));
+    ch.push(putU({ ...u, children: [...u.children.filter(c => c !== r.id), r.id] }));
+    ch.push(putP({ ...P(r.id), parentsUncertain: false }));
+    commit(ch, `Made ${shortName(r.id)} a child of ${par}`);
+  } else {
+    const p = newPerson({ given: r.given, surname: r.surname, birth: r.birth, sex: r.sex });
+    commit([putP(p), putU({ ...u, children: [...u.children, p.id] })], `Added ${shortName(p)} as a child of ${par}`);
+  }
+}
+async function addChildTo(pid) { // person with no union yet
+  let us = unionsOf(pid);
+  if (us.length === 1) return addChild(us[0].id);
+  const u = newUnion([pid]); commit([putU(u)], `Started a family for ${shortName(pid)}`, { toast: false, undo: false }); return addChild(u.id);
+}
+async function addSpouse(pid) {
+  const r = await askPerson(`Add a spouse or partner for ${shortName(pid)}`, null);
+  if (!r) return;
+  let other, ch = [];
+  if (r.id) { if (r.id === pid) return; other = r.id; } else { const p = newPerson({ given: r.given, surname: r.surname, birth: r.birth, sex: r.sex }); other = p.id; ch.push(putP(p)); }
+  // reuse a single-parent family (children with "unknown other parent") if there is one
+  const solo = unionsOf(pid).find(u => u.partners.length === 1);
+  if (solo && !unionsOf(pid).some(u => u.partners.length > 1)) ch.push(putU({ ...solo, partners: [pid, other] }));
+  else ch.push(putU(newUnion([pid, other])));
+  commit(ch, `Added ${r.id ? shortName(r.id) : r.given + (r.surname ? ' ' + r.surname : '')} as spouse/partner of ${shortName(pid)}`);
+}
+async function addParent(pid) {
+  const pu = parentUnion(pid);
+  if (pu && pu.partners.length >= 2) return toast('Two parents are already recorded. Edit them from their own cards.');
+  const r = await askPerson(`Add a parent of ${shortName(pid)}`, null, { surname: P(pid).surname });
+  if (!r) return;
+  const ch = []; let parId = r.id;
+  if (!parId) { const p = newPerson({ given: r.given, surname: r.surname, birth: r.birth, sex: r.sex }); parId = p.id; ch.push(putP(p)); }
+  if (pu) ch.push(putU({ ...pu, partners: [...pu.partners, parId] }));
+  else ch.push(putU(newUnion([parId], [pid])));
+  commit(ch, `Added ${r.id ? shortName(r.id) : r.given} as a parent of ${shortName(pid)}`);
+}
+function setParents(cid, uid) {
+  const u = T.unions[uid], old = parentUnion(cid); const ch = [];
+  if (old && old.id !== uid) ch.push(putU({ ...old, children: old.children.filter(c => c !== cid) }));
+  if (!u.children.includes(cid)) { const ord = old && old.id !== uid ? u.children.concat(cid) : u.children; ch.push(putU({ ...u, children: ord })); }
+  ch.push(putP({ ...P(cid), parentsUncertain: false }));
+  commit(ch, `Confirmed ${shortName(cid)} is a child of ${u.partners.map(x => P(x).given).join(' & ')}`);
+}
+async function changeParents(cid) {
+  const pid = await pickPerson(`Who is one of ${P(cid).given}’s parents?`);
+  if (!pid || pid === cid) return;
+  let us = unionsOf(pid);
+  if (!us.length) { const u = newUnion([pid]); commit([putU(u)], `Started a family for ${shortName(pid)}`, { toast: false, undo: false }); us = [u]; }
+  if (us.length === 1) return setParents(cid, us[0].id);
+  openDlg(dlg2, `<div class="dh"><h3>Which couple?</h3></div><div class="db">${us.map(u => `<button class="btn" style="display:block;width:100%;margin:6px 0;text-align:left" data-u="${u.id}">${esc(u.partners.map(shortName).join(' & '))}</button>`).join('')}</div><div class="df"><button class="btn" data-x>Cancel</button></div>`);
+  dlg2.onclick = e => { const b = e.target.closest('[data-u]'); if (b) { closeDlg(dlg2); setParents(cid, b.dataset.u); } else if (e.target.closest('[data-x]')) closeDlg(dlg2); };
+}
+async function deletePerson(pid) {
+  const p = P(pid); const kids = childrenOf(pid).length;
+  if (pid === IX.root) return toast('The founders can’t be deleted.');
+  if (!(await confirmBox(`Delete <b>${esc(fullName(p))}</b> from the tree?${kids ? ` Their ${kids} child${kids > 1 ? 'ren stay' : ' stays'} in the tree.` : ''} You can undo this right after.`, 'Delete', true))) return;
+  const ch = [delP(pid)];
+  for (const u of Object.values(T.unions)) {
+    if (!u.partners.includes(pid) && !u.children.includes(pid)) continue;
+    const nu = { ...u, partners: u.partners.filter(x => x !== pid), children: u.children.filter(x => x !== pid) };
+    ch.push(!nu.partners.length && !nu.children.length || (!nu.children.length && nu.partners.length < 2) ? delU(u.id) : putU(nu));
+  }
+  closeDlg(dlg); if (state.sel === pid) state.sel = parentsOf(pid)[0] || IX.root; closePanel();
+  commit(ch, `Deleted ${shortName(p)}`);
+}
+function moveChild(uid, cid, dir) {
+  const u = T.unions[uid]; const c = [...u.children]; const i = c.indexOf(cid), j = i + dir;
+  if (j < 0 || j >= c.length) return; [c[i], c[j]] = [c[j], c[i]];
+  commit([putU({ ...u, children: c })], `Reordered ${P(uid && u.partners[0]) ? P(u.partners[0]).given : ''}’s children`, { toast: false });
+}
+async function unlinkChild(uid, cid) {
+  const u = T.unions[uid];
+  if (!(await confirmBox(`Remove ${esc(shortName(cid))} from this family? They stay in the tree (under “Fill in the gaps”) so you can reconnect them.`, 'Remove link'))) return;
+  commit([putU({ ...u, children: u.children.filter(c => c !== cid) })], `Unlinked ${shortName(cid)} from ${u.partners.map(x => P(x).given).join(' & ')}`);
+}
+async function unlinkSpouse(uid, pid) {
+  const u = T.unions[uid]; const other = spousesIn(u, pid)[0];
+  if (!(await confirmBox(`Remove the marriage/partnership between ${esc(shortName(pid))} and ${esc(shortName(other))}?${u.children.length ? ' Their children stay with ' + esc(P(pid).given) + '.' : ''}`, 'Remove'))) return;
+  const ch = [];
+  if (u.children.length) ch.push(putU({ ...u, partners: [pid] })); else ch.push(delU(uid));
+  // a spouse who is now connected to nobody else is removed too
+  if (!IX.blood.has(other) && !IX.parentU[other] && unionsOf(other).length === 1) ch.push(delP(other));
+  commit(ch, `Removed ${shortName(other)} as spouse of ${shortName(pid)}`);
+}
+
+/* ---------- the person editor ---------- */
+let editId = null, photoData;
+function openEditor(id) {
+  const p = P(id); if (!p) return;
+  editId = id; photoData = undefined;
+  const pu = parentUnion(id);
+  const sel = (v, opts) => opts.map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${l}</option>`).join('');
+  let conns = `<div class="sec">Parents</div><div class="conn"><div class="row"><span>${pu ? esc(pu.partners.map(shortName).join(' & ')) || '(unknown)' : '<span class="muted">Not recorded</span>'}${p.parentsUncertain ? ' <span class="badge warn">which marriage?</span>' : ''}</span>
+    <span class="row"><button class="btn sm" data-ed="changeParents">Change…</button>${!pu || pu.partners.length < 2 ? '<button class="btn sm" data-ed="addParent">+ Parent</button>' : ''}</span></div></div>`;
+  conns += `<div class="sec">Spouses / partners & children</div>`;
+  for (const u of unionsOf(id)) {
+    const sp = spousesIn(u, id)[0];
+    conns += `<div class="conn" data-union="${u.id}"><div class="row"><b>${sp ? '& ' + esc(shortName(sp)) : '<span class="muted">Other parent not recorded</span>'}</b>${sp ? `<button class="btn sm danger" data-ed="unlinkSpouse" data-u="${u.id}">Remove</button>` : ''}</div>
+      ${sp ? `<div class="form" style="margin-top:8px"><label>Married (date)<input data-uf="married" value="${esc(u.married)}" placeholder="e.g. June 1948"></label><label>Where<input data-uf="place" value="${esc(u.place)}"></label>
+      <label>Ended<select data-uf="ended">${sel(u.ended, [['', '—'], ['divorced', 'Divorced'], ['separated', 'Separated'], ['widowed', 'Widowed']])}</select></label><label>When<input data-uf="endDate" value="${esc(u.endDate)}"></label></div>` : ''}
+      <ul class="kids">${u.children.map((c, i) => `<li><span>${esc(shortName(c))} <span class="muted">${esc(lifeYears(c))}</span></span><button class="btn sm" data-ed="up" data-u="${u.id}" data-c="${c}" ${i ? '' : 'disabled'} aria-label="Move up">↑</button><button class="btn sm" data-ed="down" data-u="${u.id}" data-c="${c}" ${i < u.children.length - 1 ? '' : 'disabled'} aria-label="Move down">↓</button><button class="btn sm" data-ed="unlinkChild" data-u="${u.id}" data-c="${c}" aria-label="Remove from family">✕</button></li>`).join('')}</ul>
+      <button class="btn sm" data-ed="addChild" data-u="${u.id}" style="margin-top:6px">+ Add a child${sp ? ' with ' + esc(P(sp).given) : ''}</button></div>`;
+  }
+  conns += `<div class="row" style="margin-top:6px"><button class="btn sm" data-ed="addSpouse">+ Add a spouse / partner</button>${!unionsOf(id).length ? '<button class="btn sm" data-ed="addChildNew">+ Add a child</button>' : ''}</div>`;
+  openDlg(dlg, `<div class="dh"><h3>Edit ${esc(shortName(p))}</h3><button class="iconbtn" data-ed="close" aria-label="Close">✕</button></div>
+  <div class="db"><form id="pf" class="form" autocomplete="off">
+    <div class="full row" style="gap:14px">${avatar(p, true).replace('class="av lg"', 'class="av lg" id="pfAv"')}<span class="row"><button type="button" class="btn sm" data-ed="photo">📷 ${p.photo ? 'Change' : 'Add a'} photo</button>${p.photo ? '<button type="button" class="btn sm" data-ed="nophoto">Remove photo</button>' : ''}</span></div>
+    <label>First name<input name="given" value="${esc(p.given)}" required></label>
+    <label>Middle name(s)<input name="middle" value="${esc(p.middle)}"></label>
+    <label>Last name<input name="surname" value="${esc(p.surname)}"></label>
+    <label>Last name at birth <span style="font-weight:400">(if different)</span><input name="birthSurname" value="${esc(p.birthSurname)}"></label>
+    <label>Nickname / also known as<input name="nick" value="${esc(p.nick)}"></label>
+    <label>Sex<select name="sex">${sel(p.sex, [['', '—'], ['F', 'Female'], ['M', 'Male'], ['X', 'Other']])}</select></label>
+    <label>Born<input name="birth" value="${esc(p.birth)}" placeholder="e.g. 4 Mar 1952, or 1931"></label>
+    <label>Birthplace<input name="birthPlace" value="${esc(p.birthPlace)}" placeholder="e.g. Philadelphia, PA"></label>
+    <label class="chk full"><input type="checkbox" name="deceased"${p.deceased ? ' checked' : ''}> Has passed away</label>
+    <label class="dd">Died<input name="death" value="${esc(p.death)}"></label>
+    <label class="dd">Where<input name="deathPlace" value="${esc(p.deathPlace)}"></label>
+    <label class="full">Notes & stories<textarea name="notes" rows="3" placeholder="Where they lived, what they did, a favourite story…">${esc(p.notes)}</textarea></label>
+  </form>${conns}
+  <div class="sec">Danger zone</div><button class="btn sm danger" data-ed="delete">🗑 Delete ${esc(p.given)} from the tree</button></div>
+  <div class="df"><span class="muted" style="margin-right:auto;font-size:.85rem;align-self:center">Family links save right away.</span><button class="btn" data-ed="close">Cancel</button><button class="btn primary" data-ed="save">Save</button></div>`);
+  const syncDD = () => $$('#dlg .dd').forEach(l => l.style.display = $('#pf [name=deceased]').checked ? '' : 'none');
+  $('#pf [name=deceased]').onchange = syncDD; syncDD();
+}
+function saveEditor(close = true) {
+  const p = P(editId); if (!p) return closeDlg(dlg);
+  const f = $('#pf'); const np = { ...p };
+  for (const k of ['given', 'middle', 'surname', 'birthSurname', 'nick', 'sex', 'birth', 'birthPlace', 'death', 'deathPlace', 'notes']) np[k] = (f.elements[k].value || '').trim();
+  np.deceased = f.elements.deceased.checked || !!np.death;
+  if (!np.given) { f.elements.given.focus(); return; }
+  if (photoData !== undefined) np.photo = photoData;
+  const ch = [];
+  if (JSON.stringify(np) !== JSON.stringify(p)) ch.push(putP(np));
+  // marriage fields
+  $$('#dlg .conn[data-union]').forEach(c => {
+    const u = T.unions[c.dataset.union]; if (!u) return; const nu = { ...u };
+    c.querySelectorAll('[data-uf]').forEach(i => nu[i.dataset.uf] = i.value.trim());
+    if (JSON.stringify(nu) !== JSON.stringify(u)) ch.push(putU(nu));
+  });
+  if (close) closeDlg(dlg);
+  if (ch.length) commit(ch, `Updated ${shortName(np)}`);
+}
+dlg.addEventListener('click', async e => {
+  const b = e.target.closest('[data-ed]'); if (!b) return;
+  const a = b.dataset.ed, id = editId;
+  if (a === 'close') return closeDlg(dlg);
+  if (a === 'save') return saveEditor();
+  if (a === 'photo') return $('#photoIn').click();
+  if (a === 'nophoto') { photoData = ''; $('#pfAv').style.backgroundImage = ''; $('#pfAv').textContent = initials(P(id)); return; }
+  if (a === 'delete') return deletePerson(id);
+  saveEditor(false);  // keep typed changes before touching links
+  if (a === 'changeParents') await changeParents(id);
+  else if (a === 'addParent') await addParent(id);
+  else if (a === 'addSpouse') await addSpouse(id);
+  else if (a === 'addChild') await addChild(b.dataset.u);
+  else if (a === 'addChildNew') await addChildTo(id);
+  else if (a === 'unlinkSpouse') await unlinkSpouse(b.dataset.u, id);
+  else if (a === 'unlinkChild') await unlinkChild(b.dataset.u, b.dataset.c);
+  else if (a === 'up' || a === 'down') moveChild(b.dataset.u, b.dataset.c, a === 'up' ? -1 : 1);
+  if (P(id)) openEditor(id);
+});
+$('#photoIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const img = await createImageBitmap(f);
+    const S = 240, c = document.createElement('canvas'); c.width = c.height = S;
+    const s = Math.min(img.width, img.height); c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S);
+    photoData = c.toDataURL('image/jpeg', 0.78);
+    const av = $('#pfAv'); if (av) { av.style.backgroundImage = `url('${photoData}')`; av.textContent = ''; }
+  } catch (err) { toast('Couldn’t read that photo.'); }
+});
+
+/* ---------- "who are you?" ---------- */
+async function chooseMe() {
+  const me = LS.get('me');
+  openDlg(dlg2, `<div class="dh"><h3>Who are you?</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db" style="min-height:320px">
+    <p class="muted" style="margin-top:0">Find yourself in the tree. Then every card shows how that person is related to you, and your edits are signed with your name. This is only remembered on this phone or computer.</p>
+    <div class="search" style="max-width:none"><input id="meQ" autofocus placeholder="Type your name…" autocomplete="off" style="padding-left:14px"><div class="results" id="meR"></div></div>
+    ${me && P(me) ? `<p style="margin-top:18px">Currently: <b>${esc(fullName(me))}</b> <button class="btn sm" data-clear>Forget me</button></p>` : ''}
+    <p class="muted" style="margin-top:18px;font-size:.9rem">Not in the tree yet? Find a parent or spouse, open their card and use “+ Add a child” or “+ Add a spouse”.</p></div>`);
+  attachSearch($('#meQ'), $('#meR'), id => { LS.set('me', id); LS.set('who', shortName(id)); closeDlg(dlg2); toast(`Hi ${P(id).given}! 👋`); afterChange(); });
+  dlg2.onclick = e => { if (e.target.closest('[data-x]')) closeDlg(dlg2); if (e.target.closest('[data-clear]')) { LS.del('me'); closeDlg(dlg2); afterChange(); } };
+}
+
+/* ---------- sharing ---------- */
+function qrSVG(text) { try { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch (e) { return '<p class="muted">(QR code unavailable)</p>'; } }
+const FB_RULES = `{
+  "rules": {
+    ".read": false, ".write": false,
+    "trees": { "$key": {
+      ".read": "$key.length >= 16",
+      ".write": "$key.length >= 16"
+    } }
+  }
+}`;
+function openShare() {
+  if (conn) {
+    const link = shareLink();
+    openDlg(dlg, `<div class="dh"><h3>Share with family</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">
+      <p style="margin-top:0"><span class="dot live" style="display:inline-block"></span> <b>This tree is live.</b> Anyone who scans this code or opens the link can see and edit it, and everyone sees changes as they happen.</p>
+      <div class="qr">${qrSVG(link)}</div>
+      <p><input readonly value="${esc(link)}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px" onclick="this.select()"></p>
+      <div class="row"><button class="btn primary" data-copy>Copy link</button><button class="btn" data-card>🖨 Print a QR card for the table</button><button class="btn" data-backup>💾 Backup</button></div>
+      <p class="muted" style="font-size:.88rem">Keep the link within the family: it works like a key. Edits can always be undone, and “Recent changes” shows who changed what.</p>
+      <details><summary class="muted">Disconnect this device</summary><p>This device will stop showing the shared tree (nothing is deleted for anyone else).</p><button class="btn sm danger" data-leave>Disconnect</button></details></div>`);
+  } else {
+    openDlg(dlg, `<div class="dh"><h3>Share with family</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">
+      <p style="margin-top:0">Right now this tree is saved <b>only on this device</b>. To let relatives view and edit it from their phones, put it in a free shared database (one-time setup, about 5 minutes):</p>
+      <ol class="steps">
+        <li>Go to <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> and sign in with a Google account. Click <b>Create a project</b> (any name, e.g. “goldstein-tree”; you can turn Analytics off).</li>
+        <li>In the left menu choose <b>Build → Realtime Database → Create database</b>. Pick the US location and <b>Start in locked mode</b>.</li>
+        <li>Open the <b>Rules</b> tab, replace everything with this, and click <b>Publish</b>:<pre class="code">${esc(FB_RULES)}</pre>This lets only people who have the family link (which has a long secret key in it) read or write.</li>
+        <li>On the <b>Data</b> tab, copy the database address at the top (it looks like <code>https://goldstein-tree-default-rtdb.firebaseio.com</code>) and paste it here:</li>
+      </ol>
+      <div class="form"><label class="full">Database address<input id="fbUrl" placeholder="https://….firebaseio.com" value="${esc(LS.get('lastDb') || '')}"></label></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" data-create>Upload this tree & make the family link</button></div>
+      <p class="muted" style="font-size:.88rem" id="shareMsg"></p>
+      <details style="margin-top:14px"><summary>Already have a family link?</summary><div class="row" style="margin-top:8px"><input id="joinUrl" placeholder="Paste the link" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px"><button class="btn" data-join>Join</button></div></details></div>`);
+  }
+}
+dlg.addEventListener('click', async e => {
+  const t = e.target;
+  if (t.closest('[data-x]')) return closeDlg(dlg);
+  if (t.closest('[data-copy]')) { try { await navigator.clipboard.writeText(shareLink()); toast('Link copied'); } catch (_) { toast('Select the link and copy it'); } }
+  if (t.closest('[data-card]')) printCard();
+  if (t.closest('[data-backup]')) download(`${slug()}-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(T, null, 1), 'application/json');
+  if (t.closest('[data-leave]')) { if (es) es.close(); LS.del('cache.' + conn.key); conn = null; LS.del('conn'); pending = []; LS.set('pending', []); LS.set('tree', T); setStatus('local'); closeDlg(dlg); toast('This device is no longer connected. You have a private copy here.'); }
+  if (t.closest('[data-join]')) { const m = String($('#joinUrl').value).match(/#join=([^/\s]+)\/([\w-]+)/); if (!m) return toast('That doesn’t look like a family link.'); closeDlg(dlg); await connect({ db: dbFromLink(m[1]), key: m[2] }); }
+  if (t.closest('[data-create]')) {
+    let db = $('#fbUrl').value.trim().replace(/\/+$/, '');
+    if (!/^https:\/\/[\w.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(db) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(db)) { $('#shareMsg').textContent = 'That should look like https://something.firebaseio.com (or …firebasedatabase.app).'; return; }
+    LS.set('lastDb', db);
+    const c = { db, key: rid('', 22) };
+    $('#shareMsg').textContent = 'Uploading…';
+    try {
+      const prev = conn; conn = c;
+      await uploadAll();
+      LS.set('conn', conn); LS.set('tree', T); saveLocal(); openStream(); setStatus('live');
+      toast('Your tree is live! Share the QR code.'); openShare();
+    } catch (err) { conn = null; $('#shareMsg').textContent = 'Couldn’t reach the database (' + err.message + '). Check the address and that the rules were published.'; }
+  }
+});
+async function connect(c, quiet) {
+  conn = c; LS.set('conn', c);
+  const cached = LS.get('cache.' + c.key);
+  if (cached && !T) { T = normTree(cached); afterChange(); show(state.view === 'welcome' ? 'tree' : state.view); }
+  setStatus('busy');
+  try {
+    const data = await fetchShared();
+    if (data) { T = normTree(data); for (const p of pending) setAt(p.path.split('/'), p.v); saveLocal(); }
+    else if (!T) { toast('That family link points to an empty tree.'); }
+    else await uploadAll();
+    afterChange(); show(state.view === 'welcome' ? 'tree' : state.view);
+    openStream(); flush();
+    if (!quiet) toast('Connected to the family tree 🎉');
+  } catch (err) {
+    setStatus('off');
+    if (!T) { renderWelcome('Couldn’t reach the family tree. Check your internet connection and try again.'); show('welcome'); }
+    setTimeout(() => connect(c, true), 10000);
+  }
+}
+function printCard() {
+  const w = window.open('', '_blank'); if (!w) return toast('Allow pop-ups to print the card.');
+  w.document.write(`<!doctype html><title>${esc(T.meta.title)}</title><body style="font-family:Georgia,serif;text-align:center;padding:40px">
+    <h1 style="font-size:40px;margin:0 0 6px">${esc(T.meta.title)}</h1><p style="font-size:20px;margin:0 0 24px">Scan to explore the family tree<br>— and add your own dates, stories and photos!</p>
+    <div style="width:380px;margin:0 auto">${qrSVG(shareLink())}</div><p style="font-size:14px;color:#555;margin-top:20px">Find yourself → tap “Edit” → fill in what you know.</p>
+    <script>setTimeout(()=>print(),300)<\/script></body>`);
+  w.document.close();
+}
+
+/* ---------- import / export ---------- */
+const slug = () => (T.meta.title || 'family-tree').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+$('#fileIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const data = normTree(JSON.parse(await f.text()));
+    if (!Object.keys(data.people).length) throw new Error('no people');
+    if (T && !(await confirmBox(`Replace the current tree${conn ? ' <b>for everyone</b>' : ''} with “${esc(f.name)}” (${Object.keys(data.people).length} people)? Download a backup first if you’re unsure.`, 'Replace', true))) return;
+    T = data; undoStack.length = 0;
+    if (conn) { await uploadAll(); } else LS.set('tree', T);
+    afterChange(); show(state.view === 'welcome' ? 'tree' : state.view); toast('Tree loaded');
+  } catch (err) { toast('That file isn’t a family-tree backup.'); }
+});
+function gedcom() {
+  const ids = {}; let i = 0, j = 0; for (const id in T.people) ids[id] = '@I' + (++i) + '@'; const fid = {}; for (const id in T.unions) fid[id] = '@F' + (++j) + '@';
+  const gd = s => { s = String(s).trim(); return s.replace(/^(c\.|ca\.?|circa|about|abt\.?)\s*/i, 'ABT ').replace(/^before\s*/i, 'BEF ').replace(/^after\s*/i, 'AFT ').toUpperCase(); };
+  const L = ['0 HEAD', '1 SOUR GoldsteinFamilyTree', '1 GEDC', '2 VERS 5.5.1', '2 FORM LINEAGE-LINKED', '1 CHAR UTF-8'];
+  for (const id in T.people) {
+    const p = T.people[id];
+    L.push(`0 ${ids[id]} INDI`, `1 NAME ${[p.given, p.middle].filter(Boolean).join(' ')} /${p.birthSurname || p.surname}/`, `2 GIVN ${[p.given, p.middle].filter(Boolean).join(' ')}`);
+    if (p.surname || p.birthSurname) L.push(`2 SURN ${p.birthSurname || p.surname}`); if (p.nick) L.push(`2 NICK ${p.nick}`);
+    if (p.birthSurname && p.surname && p.surname !== p.birthSurname) L.push(`1 NAME ${p.given} /${p.surname}/`, '2 TYPE aka');
+    L.push(`1 SEX ${p.sex === 'F' ? 'F' : p.sex === 'M' ? 'M' : 'U'}`);
+    if (p.birth || p.birthPlace) { L.push('1 BIRT'); if (p.birth) L.push('2 DATE ' + gd(p.birth)); if (p.birthPlace) L.push('2 PLAC ' + p.birthPlace); }
+    if (p.deceased) { L.push(p.death || p.deathPlace ? '1 DEAT' : '1 DEAT Y'); if (p.death) L.push('2 DATE ' + gd(p.death)); if (p.deathPlace) L.push('2 PLAC ' + p.deathPlace); }
+    if (p.notes) p.notes.split('\n').forEach((ln, k) => L.push((k ? '2 CONT ' : '1 NOTE ') + ln));
+    for (const u of unionsOf(id)) L.push('1 FAMS ' + fid[u.id]);
+    if (IX.parentU[id]) L.push('1 FAMC ' + fid[IX.parentU[id]]);
+  }
+  for (const id in T.unions) {
+    const u = T.unions[id]; L.push(`0 ${fid[id]} FAM`);
+    const [a, b] = u.partners; const role = (x, dflt) => P(x).sex === 'F' ? 'WIFE' : P(x).sex === 'M' ? 'HUSB' : dflt;
+    if (a) L.push(`1 ${role(a, 'HUSB')} ${ids[a]}`); if (b) L.push(`1 ${role(b, a && role(a, 'HUSB') === 'WIFE' ? 'HUSB' : 'WIFE')} ${ids[b]}`);
+    for (const c of u.children) L.push('1 CHIL ' + ids[c]);
+    if (u.married || u.place) { L.push('1 MARR'); if (u.married) L.push('2 DATE ' + gd(u.married)); if (u.place) L.push('2 PLAC ' + u.place); }
+    if (u.ended === 'divorced') { L.push('1 DIV'); if (u.endDate) L.push('2 DATE ' + gd(u.endDate)); }
+  }
+  L.push('0 TRLR'); return L.join('\n') + '\n';
+}
+function chartSVG() {
+  const keep = state.collapsed; state.collapsed = new Set(); renderTree();
+  const g = $('#treeG'); const bb = g.getBBox();
+  const css = `.link{fill:none;stroke-width:1.6;opacity:.6}.box{fill:#fffdf8;stroke:#d8ccb6}.nm{font:700 14px Helvetica,Arial,sans-serif;fill:#2a231d}.yr{font:11.5px Helvetica,Arial,sans-serif;fill:#6b6056}.sp{font:12px Helvetica,Arial,sans-serif;fill:#4a4038}.tg{display:none}.unc{font:700 12px sans-serif;fill:#a4501f}`;
+  const vars = getComputedStyle(document.documentElement);
+  let inner = g.innerHTML.replace(/var\((--b\w)\)/g, (m, v) => vars.getPropertyValue(v).trim());
+  const out = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="${bb.x - 40} ${bb.y - 90} ${bb.width + 80} ${bb.height + 130}" width="${bb.width + 80}" height="${bb.height + 130}"><style>${css}</style><rect x="${bb.x - 40}" y="${bb.y - 90}" width="${bb.width + 80}" height="${bb.height + 130}" fill="#f6f1e7"/><text x="${bb.x}" y="${bb.y - 40}" font-family="Georgia,serif" font-size="34" font-weight="700" fill="#2a231d">${esc(T.meta.title)}</text><g>${inner}</g></svg>`;
+  state.collapsed = keep; renderTree();
+  return out;
+}
+
+/* ---------- welcome (no tree on this device yet) ---------- */
+function renderWelcome(msg) {
+  $('#welcome').innerHTML = `<h2>Family Tree</h2>${msg ? `<p class="warnbox">${esc(msg)}</p>` : ''}
+    <p>This is a private family tree. To see it, <b>scan the QR code</b> or open the link a family member sent you.</p>
+    <div class="row" style="margin-top:18px"><button class="btn primary" data-wa="join">I have a link</button><button class="btn" data-wa="open">Open a backup file</button><button class="btn" data-wa="new">Start a new tree</button></div>`;
+}
+$('#welcome').addEventListener('click', async e => {
+  const a = e.target.closest('[data-wa]'); if (!a) return;
+  if (a.dataset.wa === 'open') $('#fileIn').click();
+  if (a.dataset.wa === 'join') { T = null; openShare(); }
+  if (a.dataset.wa === 'new') {
+    const r = await askPerson('Who is at the top of the tree?', 'Start with the oldest ancestor you know.', { existing: false });
+    if (!r) return;
+    const p = newPerson({ given: r.given, surname: r.surname, birth: r.birth, sex: r.sex });
+    T = normTree({ meta: { title: `The ${r.surname || r.given} Family`, subtitle: '' }, root: p.id, people: { [p.id]: p }, unions: {} });
+    LS.set('tree', T); afterChange(); show('family');
+  }
+});
+
+/* ---------- global event wiring ---------- */
+document.addEventListener('click', async e => {
+  const t = e.target;
+  const go = t.closest('[data-go]'); if (go) { goPerson(go.dataset.go); return; }
+  if (t.closest('[data-back]')) { const x = state.hist.pop(); if (x) goPerson(x, false); return; }
+  const pn = t.closest('[data-panel]'); if (pn) { if (state.view === 'family') goPerson(pn.dataset.panel); else openPanel(pn.dataset.panel); return; }
+  if (t.closest('#panel [data-close]')) return closePanel();
+  const vg = t.closest('[data-view-go]'); if (vg) return show(vg.dataset.viewGo);
+  const act = t.closest('[data-act]');
+  if (act) {
+    const a = act.dataset.act, id = act.dataset.id;
+    if (a === 'edit') return openEditor(id);
+    if (a === 'tree') { closePanel(); return focusTree(id); }
+    if (a === 'relate') { state.relB = id; return show('related'); }
+    if (a === 'addChild') return addChild(act.dataset.u);
+    if (a === 'addSpouse') return addSpouse(id);
+    if (a === 'addParent') return addParent(id);
+    if (a === 'setParents') return setParents(id, act.dataset.u);
+  }
+  if (!t.closest('#menu,#menuBtn')) { $('#menu').classList.remove('open'); $('#menuBtn').setAttribute('aria-expanded', 'false'); }
+});
+$$('nav.tabs button').forEach(b => b.addEventListener('click', () => { closePanel(); show(b.dataset.view); }));
+$('#menuBtn').onclick = () => { const m = $('#menu'); m.classList.toggle('open'); $('#menuBtn').setAttribute('aria-expanded', m.classList.contains('open')); };
+$('#menu').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return; $('#menu').classList.remove('open');
+  const a = b.dataset.act;
+  if (!T && !['import', 'about', 'big'].includes(a)) return;
+  if (a === 'share') openShare();
+  if (a === 'big') { document.body.classList.toggle('big'); LS.set('big', document.body.classList.contains('big')); treeFitted = fanFitted = false; render(); }
+  if (a === 'backup') download(`${slug()}-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(T, null, 1), 'application/json');
+  if (a === 'import') $('#fileIn').click();
+  if (a === 'gedcom') download(`${slug()}.ged`, gedcom(), 'text/plain');
+  if (a === 'svg') { const prev = state.view; show('tree'); download(`${slug()}-chart.svg`, chartSVG(), 'image/svg+xml'); show(prev); }
+  if (a === 'print') window.print();
+  if (a === 'log') openDlg(dlg, `<div class="dh"><h3>Recent changes</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">${logHTML(150)}</div>`);
+  if (a === 'about') openDlg(dlg, `<div class="dh"><h3>How this works</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">
+    <p><b>Find anyone</b> with the search box. Tap a person for their details; <b>✏️ Edit</b> changes names, dates, places, photos, notes, marriages and children.</p>
+    <p><b>Views:</b> 🌳 Tree (tap +/− to open branches; drag to move, pinch or scroll to zoom) · 🌀 Fan (everyone at once) · 👪 Family (one person and their closest relatives) · 📜 List · 🔗 How are we related? · 📅 Timeline · ✍️ Fill in the gaps.</p>
+    <p><b>🙋 Who are you?</b> Pick yourself and every card shows how you’re related.</p>
+    <p><b>Saving:</b> ${conn ? 'this tree is shared live: everyone with the family link sees changes immediately, even edits made while offline once you reconnect.' : 'right now changes are saved on this device only. Use ☰ → Share with family to put it online for everyone.'} Every change can be undone, and ☰ → Recent changes shows who changed what.</p>
+    <p><b>Dates</b> can be written any way (“1931”, “about 1890”, “March 4, 1952”).</p></div>`);
+});
+$('#meBtn').onclick = chooseMe;
+$('#syncBtn').onclick = () => T ? openShare() : null;
+$('#undoBtn').onclick = undo;
+document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.target.matches('input,textarea') && !dlg.open) { e.preventDefault(); undo(); } });
+attachSearch($('#q'), $('#qres'), id => { $('#q').value = ''; $('#q').blur(); if (state.view === 'tree') { focusTree(id); openPanel(id); } else if (state.view === 'family') goPerson(id); else openPanel(id); });
+// chart clicks
+$('#treeSvg').addEventListener('click', e => {
+  const tg = e.target.closest('[data-toggle]');
+  if (tg) { const id = tg.dataset.toggle; state.collapsed.has(id) ? state.collapsed.delete(id) : state.collapsed.add(id); saveCollapsed(); renderTree(); return; }
+  const n = e.target.closest('.node'); if (n) openPanel(n.dataset.id);
+});
+$('#treeSvg').addEventListener('keydown', e => { const n = e.target.closest('.node'); if (n && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openPanel(n.dataset.id); } });
+$('#fanSvg').addEventListener('click', e => { const n = e.target.closest('[data-id]'); if (n) openPanel(n.dataset.id); });
+$('#expandAll').onclick = () => { state.collapsed = new Set(); saveCollapsed(); renderTree(); fitTreeNice(); };
+$('#collapseAll').onclick = () => { state.collapsed = defaultCollapsed(); for (const id of IX.blood) if (IX.depth[id] >= 1 && childrenOf(id).length) state.collapsed.add(id); saveCollapsed(); renderTree(); fitTreeNice(); };
+$('#treeMe').onclick = () => focusTree(LS.get('me'));
+$$('.tools').forEach(t => t.addEventListener('click', e => { const b = e.target.closest('[data-z]'); if (!b) return; const vp = t.closest('#v-tree') ? treeVP : fanVP; b.dataset.z === 'fit' ? vp.fit(30, 1) : vp.zoom(b.dataset.z === 'in' ? 1.3 : 1 / 1.3); }));
+// list view
+$('#listQ').addEventListener('input', () => renderList());
+$('#outline').addEventListener('click', e => {
+  const tw = e.target.closest('[data-tw]'); if (!tw) return;
+  const ul = tw.closest('li').querySelector(':scope>ul'); if (!ul) return;
+  ul.hidden = !ul.hidden; tw.textContent = ul.hidden ? '▸' : '▾'; tw.setAttribute('aria-expanded', !ul.hidden);
+  state.listClosed = state.listClosed || new Set(); /* remember only within this visit */
+});
+$('#listOpen').onclick = () => $$('#outline ul').forEach(u => { u.hidden = false; const tw = u.parentElement.querySelector(':scope>.ln .tw'); if (tw && tw.dataset.tw) tw.textContent = '▾'; });
+$('#listClose').onclick = () => $$('#outline li ul').forEach(u => { if (u.parentElement.closest('ul').parentElement.closest('li')) { u.hidden = true; const tw = u.parentElement.querySelector(':scope>.ln .tw'); if (tw && tw.dataset.tw) tw.textContent = '▸'; } });
+// related pickers (inputs are re-rendered, so delegate)
+$('#relPad').addEventListener('focusin', e => {
+  const inp = e.target.closest('[data-pick]'); if (!inp || inp._wired) return; inp._wired = true;
+  const box = document.createElement('div'); box.className = 'results'; inp.parentElement.appendChild(box);
+  attachSearch(inp, box, id => { state[inp.dataset.pick] = id; renderRelated(); });
+  inp.select();
+});
+// help view: quick dates + filters
+$('#helpPad').addEventListener('change', e => {
+  if (e.target.id === 'hb') { state.helpBranch = e.target.value; return renderHelp(); }
+  if (e.target.id === 'hm') { state.helpMissing = e.target.checked; return renderHelp(); }
+  const q = e.target.closest('input[data-q]'); if (!q) return;
+  const id = q.closest('tr').dataset.id, p = P(id); const f = q.dataset.q, v = q.value.trim();
+  if (p[f] === v) return;
+  const np = { ...p, [f]: v }; if (f === 'death' && v) np.deceased = true;
+  q.classList.add('saved');
+  const keepFocus = document.activeElement;
+  commit([putP(np)], `Set ${shortName(p)}’s ${f === 'birth' ? 'birth' : 'death'} date to ${v || '(blank)'}`, { toast: false });
+  if (keepFocus && keepFocus !== q && keepFocus.matches('input[data-q]')) { const r = keepFocus.closest('tr').dataset.id, ff = keepFocus.dataset.q; const again = $(`#helpPad tr[data-id="${r}"] input[data-q="${ff}"]`); if (again) again.focus(); }
+});
+window.addEventListener('online', () => flush());
+window.addEventListener('resize', () => { if (state.view === 'timeline') renderTimeline(); });
+
+/* ---------- start-up ---------- */
+function joinFromHash() {
+  const m = location.hash.match(/#join=([^/]+)\/([\w-]+)/); if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return { db: dbFromLink(m[1]), key: m[2] };
+}
+window.addEventListener('hashchange', () => {
+  const c = joinFromHash(); if (!c || (conn && conn.key === c.key)) return;
+  if (es) es.close(); if (conn) LS.del('cache.' + conn.key); pending = []; LS.set('pending', []); T = null; connect(c);
+});
+(function boot() {
+  if (LS.get('big')) document.body.classList.add('big');
+  treeVP = Viewport($('#treeSvg'), $('#treeG'));
+  fanVP = Viewport($('#fanSvg'), $('#fanG'));
+  state.sel = LS.get('sel');
+  // 1. arriving with a family link?
+  const c = joinFromHash();
+  if (c) { if (!conn || conn.key !== c.key) { if (conn) LS.del('cache.' + conn.key); pending = []; LS.set('pending', []); } conn = c; LS.set('conn', c); }
+  if (conn) { const cached = LS.get('cache.' + conn.key); if (cached) T = normTree(cached); }
+  // 2. otherwise: this device's own copy, or the starting data that sits next to this page on Adam's Mac
+  else if (LS.get('tree')) T = normTree(LS.get('tree'));
+  else if (window.FAMILY_SEED) { T = normTree(clone(window.FAMILY_SEED)); LS.set('tree', T); }
+  setStatus(conn ? 'busy' : 'local');
+  if (T) { afterChange(); show(state.view === 'welcome' ? 'tree' : state.view); }
+  else { renderWelcome(); show('welcome'); }
+  if (conn) connect(conn, true);
+})();
+</script>
+</body>
+</html>
