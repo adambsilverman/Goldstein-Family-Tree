@@ -56,9 +56,14 @@ header.top{display:flex;align-items:center;gap:12px;padding:10px 16px;background
 .dot.busy{background:var(--sel)}
 .dot.off{background:var(--warn)}
 
-nav.tabs{display:flex;gap:4px;padding:6px 12px 0;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none}
+nav.tabs{display:flex;align-items:center;gap:10px;padding:6px 12px 0;background:var(--card);border-bottom:1px solid var(--line);flex:none}
+.tabscroll{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
+.tabscroll::-webkit-scrollbar{display:none}
 nav.tabs button{border:0;background:none;padding:9px 14px 11px;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;color:var(--muted);font-weight:600}
 nav.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.sh{display:none}
+nav.tabs .navadd{flex:none;border:1.5px solid var(--accent);background:var(--accent);color:#fff;padding:7px 14px;margin-bottom:5px;font-weight:600;white-space:nowrap}
+nav.tabs .navadd:hover{background:var(--accent2)}
 nav.tabs button .n{display:inline-block;background:var(--warn);color:#fff;border-radius:0;font-size:.72rem;padding:0 7px;margin-left:5px;vertical-align:1px}
 
 main{flex:1;position:relative;overflow:hidden}
@@ -233,6 +238,11 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
   header.top{gap:8px;padding:8px 10px}
   .search{order:3;flex-basis:100%;max-width:none}
   .hbtns .lbl{display:none}
+  .hbtns .sh{display:inline}
+  .hbtns .pill{padding:7px 10px}
+  #undoBtn{display:none!important}
+  nav.tabs{padding-left:4px;padding-right:8px}
+  nav.tabs .navadd{padding:6px 10px}
   .form{grid-template-columns:1fr}
   dialog{max-width:100vw;max-height:100vh;height:100%;border-radius:0;margin:0}
   dialog .db{max-height:none;flex:1}
@@ -269,36 +279,39 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
     <div class="results" id="qres" role="listbox"></div>
   </div>
   <div class="hbtns">
-    <button class="pill" id="relBtn" title="How are two people related?">🔗 <span class="lbl">How related?</span></button>
-    <button class="pill" id="meBtn" title="Tell the tree who you are">🙋 <span class="lbl" id="meLbl">Who are you?</span></button>
+    <button class="pill" id="relBtn" title="How are two people related?"><span class="lbl">How related?</span><span class="sh">Related</span></button>
+    <button class="pill" id="meBtn" title="Tell the tree who you are"><span id="meLbl">Who are you?</span></button>
     <button class="pill" id="syncBtn" title="Sharing and saving"><span class="dot" id="syncDot"></span><span class="lbl" id="syncLbl">On this device</span></button>
-    <button class="pill" id="undoBtn" title="Undo" disabled hidden>↶ <span class="lbl">Undo</span></button>
+    <button class="pill" id="undoBtn" title="Undo" disabled hidden>Undo</button>
     <div style="position:relative">
-      <button class="pill" id="menuBtn" aria-haspopup="true" aria-expanded="false" title="More">☰ <span class="lbl">More</span></button>
+      <button class="pill" id="menuBtn" aria-haspopup="true" aria-expanded="false" title="More options">Menu</button>
       <div class="menu" id="menu" role="menu">
-        <button data-act="share" role="menuitem">📲 Share with family (QR code)</button>
-        <button data-act="big" role="menuitem">🔠 Bigger text</button>
+        <button data-act="share" role="menuitem">Share with family (QR code)</button>
+        <button data-act="big" role="menuitem">Bigger text</button>
         <hr>
-        <button data-act="backup" role="menuitem">💾 Download a backup (.json)</button>
-        <button data-act="import" role="menuitem">📂 Open a backup…</button>
-        <button data-act="gedcom" role="menuitem">🧬 Export for Ancestry / FamilySearch (.ged)</button>
-        <button data-act="svg" role="menuitem">🖼️ Download the full chart (poster .svg)</button>
-        <button data-act="print" role="menuitem">🖨️ Print this view</button>
+        <button data-act="backup" role="menuitem">Download a backup (.json)</button>
+        <button data-act="import" role="menuitem">Open a backup…</button>
+        <button data-act="gedcom" role="menuitem">Export for Ancestry / FamilySearch (.ged)</button>
+        <button data-act="svg" role="menuitem">Download the full chart (poster .svg)</button>
+        <button data-act="print" role="menuitem">Print this view</button>
         <hr>
-        <button data-act="log" role="menuitem">🕘 Recent changes</button>
-        <button data-act="about" role="menuitem">ℹ️ How this works</button>
+        <button data-act="log" role="menuitem">Recent changes</button>
+        <button data-act="about" role="menuitem">How this works</button>
       </div>
     </div>
   </div>
 </header>
 <nav class="tabs" role="tablist" aria-label="Views">
-  <button role="tab" data-view="tree">🌳 Tree</button>
-  <button role="tab" data-view="related">🔗 How are we related?</button>
-  <button role="tab" data-view="fan">🌀 Fan</button>
-  <button role="tab" data-view="family">👪 Family</button>
-  <button role="tab" data-view="list">📜 List</button>
-  <button role="tab" data-view="timeline">📅 Timeline</button>
-  <button role="tab" data-view="help">✍️ Fill in the gaps<span class="n" id="gapN" hidden></span></button>
+  <div class="tabscroll">
+  <button role="tab" data-view="tree">Tree</button>
+  <button role="tab" data-view="related">How are we related?</button>
+  <button role="tab" data-view="fan">Fan</button>
+  <button role="tab" data-view="family">Family</button>
+  <button role="tab" data-view="list">List</button>
+  <button role="tab" data-view="timeline">Timeline</button>
+  <button role="tab" data-view="help">Fill in the gaps<span class="n" id="gapN" hidden></span></button>
+  </div>
+  <button class="navadd" id="addRelBtn" type="button">+ Add a relative</button>
 </nav>
 <main>
   <section class="view canvas" id="v-tree" role="tabpanel">
@@ -539,7 +552,7 @@ const who = () => { const me = LS.get('me'); return me && P(me) ? shortName(me) 
 
 function saveLocal() {
   const ok = LS.set(conn ? 'cache.' + conn.key : 'tree', T);
-  if (!ok) toast('This browser is out of storage space — download a backup from the ☰ menu.');
+  if (!ok) toast('This browser is out of storage space — download a backup from the Menu.');
 }
 function persist(changes) {
   if (!conn) { saveLocal(); return; }
@@ -738,7 +751,7 @@ function renderTree() {
     el('rect', { width: 5, height: n.h, fill: brColor(n.id) }, ng);
     if (p.photo) { const cp = 'c' + n.id; const defs = el('defs', {}, ng); const c = el('clipPath', { id: cp }, defs); el('rect', { x: n.w - 37, y: 7, width: 30, height: 30 }, c); el('image', { href: p.photo, x: n.w - 37, y: 7, width: 30, height: 30, 'clip-path': `url(#${cp})`, preserveAspectRatio: 'xMidYMid slice' }, ng); }
     const t = el('text', { class: 'nm', x: 16, y: 20 }, ng); t.textContent = trunc(shortName(p) + (p.nick ? ` (${p.nick})` : ''), p.photo ? 21 : 25);
-    const yrTxt = [lifeYears(p), n.id === me ? '★ you' : ''].filter(Boolean).join('  ');
+    const yrTxt = [lifeYears(p), n.id === me ? '(you)' : ''].filter(Boolean).join('  ');
     if (yrTxt) { const yr = el('text', { class: 'yr', x: 16, y: 35 }, ng); yr.textContent = yrTxt; }
     const sy = yrTxt ? 52 : 37;
     spouses(n.id).forEach((s, i) => { const st = el('text', { class: 'sp', x: 16, y: sy + i * 16 }, ng); st.textContent = trunc('& ' + shortName(s) + (lifeYears(s) ? ' ' + lifeYears(s) : ''), 29); });
@@ -810,7 +823,7 @@ function renderFan() {
     const [x, y] = xy(p.r, p.a); const deg = p.a * 180 / Math.PI; const flip = Math.cos(p.a) < 0;
     { const s = p.d === 1 ? 14 : 8; el('rect', { class: 'n', x: x - s / 2, y: y - s / 2, width: s, height: s, fill: brColor(id), 'data-id': id, transform: `rotate(${deg} ${x} ${y})` }, g); }
     const t = el('text', { class: 'lbl' + (p.d === 1 ? ' d1' : '') + (id === state.sel ? ' sel' : '') + (id === me ? ' me' : ''), 'data-id': id, transform: `translate(${x},${y}) rotate(${flip ? deg + 180 : deg})`, x: flip ? -11 : 11, y: 4, 'text-anchor': flip ? 'end' : 'start' }, g);
-    t.textContent = (id === me ? '★ ' : '') + trunc(p.d === 1 ? pp.given : shortName(pp), p.d === 1 ? 20 : 22);
+    t.textContent = (id === me ? '● ' : '') + trunc(p.d === 1 ? pp.given : shortName(pp), p.d === 1 ? 20 : 22);
     el('title', {}, t).textContent = [fullName(pp), lifeYears(pp), spouses(id).map(s => '& ' + shortName(s)).join(', ')].filter(Boolean).join(' · ');
   }
   // centre: the founders
@@ -864,7 +877,7 @@ function renderFamily() {
       ag != null ? (p.deceased ? `aged ${ag}` : `${ag} years old`) : ''].filter(Boolean).join(' · ') || '<span class="muted">No dates yet</span>'}</div>
     ${rel ? `<div style="margin-top:6px"><span class="badge me">${esc(rel)}</span></div>` : ''}
     ${p.notes ? `<p style="margin:8px 0 0;white-space:pre-wrap">${esc(p.notes)}</p>` : ''}</div>
-    <div class="acts row"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-act="tree" data-id="${id}">🌳 Show in tree</button><button class="btn" data-act="relate" data-id="${id}">🔗 How related?</button></div></div>`;
+    <div class="acts row"><button class="btn primary" data-act="edit" data-id="${id}">Edit</button><button class="btn" data-act="tree" data-id="${id}">Show in tree</button><button class="btn" data-act="relate" data-id="${id}">How related?</button></div></div>`;
   const us = unionsOf(id);
   h += `<div class="sec">${us.length > 1 ? 'Marriages & partners' : 'Spouse / partner'}</div>`;
   if (!us.length) h += `<p class="muted">None recorded.</p>`;
@@ -915,7 +928,7 @@ function renderList() {
 state.relA = null; state.relB = null;
 function relPicker(key, label, id) {
   const me = LS.get('me');
-  return `<div class="relbox"><div class="relhead"><span>${label}</span>${me && P(me) && id !== me ? `<button class="btn sm" data-relme="${key}">🙋 Me</button>` : ''}</div>
+  return `<div class="relbox"><div class="relhead"><span>${label}</span>${me && P(me) && id !== me ? `<button class="btn sm" data-relme="${key}">Me</button>` : ''}</div>
     <div class="pick">${id && P(id)
       ? `<div class="relchosen">${pcard(id, lifeYears(id) || context(id))}<button class="iconbtn" data-relclear="${key}" aria-label="Choose someone else">✕</button></div>`
       : `<input data-pick="${key}" placeholder="Type a name…" autocomplete="off" aria-label="${esc(label)}">`}</div></div>`;
@@ -951,7 +964,7 @@ function renderRelated(focusKey) {
     }
     h += `</div>`;
   } else {
-    h += `<p class="muted" style="margin-top:18px">${!me ? 'Tip: tap <b>🙋 Who are you?</b> at the top, and you’ll be filled in as the first person automatically — and every card will say how you’re related.' : 'Start typing a name in the empty box.'}</p>`;
+    h += `<p class="muted" style="margin-top:18px">${!me ? 'Tip: tap <b>Who are you?</b> at the top, and you’ll be filled in as the first person automatically — and every card will say how you’re related.' : 'Start typing a name in the empty box.'}</p>`;
   }
   pad.innerHTML = h;
   const f = $(`#relPad input[data-pick="${focusKey || (!A ? 'relA' : !B ? 'relB' : '')}"]`);
@@ -968,7 +981,7 @@ function renderTimeline() {
   const ppl = Object.values(T.people).map(p => ({ p, b: yearOf(p.birth), d: yearOf(p.death) })).filter(x => x.b);
   const total = Object.keys(T.people).length;
   if (ppl.length < 2) {
-    pad.innerHTML = `<div class="empty" style="max-width:560px;margin:0 auto"><h2>The timeline fills in as birth years are added</h2><p>${ppl.length} of ${total} people have a birth year so far. Even a guess like “about 1890” helps.</p><button class="btn primary" data-view-go="help">✍️ Add dates now</button></div>`;
+    pad.innerHTML = `<div class="empty" style="max-width:560px;margin:0 auto"><h2>The timeline fills in as birth years are added</h2><p>${ppl.length} of ${total} people have a birth year so far. Even a guess like “about 1890” helps.</p><button class="btn primary" data-view-go="help">Add dates now</button></div>`;
     return;
   }
   ppl.sort((a, b) => a.b - b.b);
@@ -1032,9 +1045,9 @@ function renderHelp() {
     h += `<tr data-id="${id}"><td><button class="nm" data-panel="${id}" style="border:0;background:none;padding:0;font-weight:700;cursor:pointer;text-align:left">${esc(shortName(p))}</button><br><small class="muted">${esc(context(id))}</small></td>
       <td><input type="text" data-q="birth" value="${esc(p.birth)}" placeholder="born…" aria-label="Birth date of ${esc(shortName(p))}"></td>
       <td><input type="text" data-q="death" value="${esc(p.death)}" placeholder="${p.deceased ? 'died…' : '(living)'}" aria-label="Death date of ${esc(shortName(p))}"></td>
-      <td><button class="btn sm" data-act="edit" data-id="${id}" title="More details">✏️</button></td></tr>`;
+      <td><button class="btn sm" data-act="edit" data-id="${id}" title="More details">Edit</button></td></tr>`;
   }
-  h += `</tbody></table></div>${shown ? '' : '<p class="empty">Everyone here has a birth date. 🎉</p>'}`;
+  h += `</tbody></table></div>${shown ? '' : '<p class="empty">Everyone here has a birth date.</p>'}`;
   if (G.orphans.length) h += `<div class="sec">Not connected to anyone (${G.orphans.length})</div><div class="grid">${G.orphans.map(p => pcard(p.id, 'tap to connect')).join('')}</div>`;
   h += `<div class="sec">Recent changes</div>${logHTML(12)}`;
   pad.innerHTML = h;
@@ -1057,7 +1070,7 @@ function openPanel(id) {
     ${p.birth || p.birthPlace ? `<p style="margin:4px 0">Born ${esc([p.birth, p.birthPlace].filter(Boolean).join(', '))}</p>` : ''}
     ${p.death || p.deathPlace ? `<p style="margin:4px 0">Died ${esc([p.death, p.deathPlace].filter(Boolean).join(', '))}</p>` : ''}
     ${p.notes ? `<p style="white-space:pre-wrap">${esc(p.notes)}</p>` : ''}
-    <div class="row" style="margin:12px 0"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-go="${id}">👪 Family</button><button class="btn" data-act="tree" data-id="${id}">🌳 Tree</button><button class="btn" data-act="relate" data-id="${id}">🔗 How related?</button></div>
+    <div class="row" style="margin:12px 0"><button class="btn primary" data-act="edit" data-id="${id}">Edit</button><button class="btn" data-go="${id}">Family</button><button class="btn" data-act="tree" data-id="${id}">Tree</button><button class="btn" data-act="relate" data-id="${id}">How related?</button></div>
     ${p.parentsUncertain ? uncertainBox(id) : ''}
     ${par.length ? `<div class="sec">Parents</div>${par.map(x => pcard(x)).join('')}` : ''}
     ${spouses(id).length ? `<div class="sec">Spouse / partner</div>${spouses(id).map(x => pcard(x)).join('')}` : ''}
@@ -1104,7 +1117,7 @@ function show(v) {
   if (!T) v = 'welcome';
   state.view = v; if (v !== 'welcome') LS.set('view', v);
   $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
-  $$('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.view === v));
+  $$('nav.tabs button[role=tab]').forEach(b => b.setAttribute('aria-selected', b.dataset.view === v));
   render();
 }
 function render() {
@@ -1194,10 +1207,10 @@ async function addChild(uid) {
     if (old) ch.push(putU({ ...old, children: old.children.filter(c => c !== r.id) }));
     ch.push(putU({ ...u, children: [...u.children.filter(c => c !== r.id), r.id] }));
     ch.push(putP({ ...P(r.id), parentsUncertain: false }));
-    commit(ch, `Made ${shortName(r.id)} a child of ${par}`);
+    commit(ch, `Made ${shortName(r.id)} a child of ${par}`); return r.id;
   } else {
     const p = newPerson({ given: r.given, surname: r.surname, birth: r.birth, sex: r.sex });
-    commit([putP(p), putU({ ...u, children: [...u.children, p.id] })], `Added ${shortName(p)} as a child of ${par}`);
+    commit([putP(p), putU({ ...u, children: [...u.children, p.id] })], `Added ${shortName(p)} as a child of ${par}`); return p.id;
   }
 }
 async function addChildTo(pid) { // person with no union yet
@@ -1214,7 +1227,7 @@ async function addSpouse(pid) {
   const solo = unionsOf(pid).find(u => u.partners.length === 1);
   if (solo && !unionsOf(pid).some(u => u.partners.length > 1)) ch.push(putU({ ...solo, partners: [pid, other] }));
   else ch.push(putU(newUnion([pid, other])));
-  commit(ch, `Added ${r.id ? shortName(r.id) : r.given + (r.surname ? ' ' + r.surname : '')} as spouse/partner of ${shortName(pid)}`);
+  commit(ch, `Added ${r.id ? shortName(r.id) : r.given + (r.surname ? ' ' + r.surname : '')} as spouse/partner of ${shortName(pid)}`); return other;
 }
 async function addParent(pid) {
   const pu = parentUnion(pid);
@@ -1225,7 +1238,7 @@ async function addParent(pid) {
   if (!parId) { const p = newPerson({ given: r.given, surname: r.surname, birth: r.birth, sex: r.sex }); parId = p.id; ch.push(putP(p)); }
   if (pu) ch.push(putU({ ...pu, partners: [...pu.partners, parId] }));
   else ch.push(putU(newUnion([parId], [pid])));
-  commit(ch, `Added ${r.id ? shortName(r.id) : r.given} as a parent of ${shortName(pid)}`);
+  commit(ch, `Added ${r.id ? shortName(r.id) : r.given} as a parent of ${shortName(pid)}`); return parId;
 }
 function setParents(cid, uid) {
   const u = T.unions[uid], old = parentUnion(cid); const ch = [];
@@ -1276,6 +1289,63 @@ async function unlinkSpouse(uid, pid) {
   commit(ch, `Removed ${shortName(other)} as spouse of ${shortName(pid)}`);
 }
 
+/* ---------- "Add a relative": pick a person, pick how they're related, add ---------- */
+function chooseCouple(pid, title) { // -> union id, or null
+  const us = unionsOf(pid);
+  if (us.length <= 1) return Promise.resolve(us[0] ? us[0].id : 'none');
+  return new Promise(res => {
+    openDlg(dlg2, `<div class="dh"><h3>${esc(title)}</h3><button class="iconbtn" data-r="x" aria-label="Close">✕</button></div><div class="db">
+      ${us.map(u => `<button class="btn" style="display:block;width:100%;margin:6px 0;text-align:left" data-r="${u.id}">${esc(P(pid).given)} & ${esc(spousesIn(u, pid).map(shortName).join(' & ') || 'other parent not recorded')}</button>`).join('')}</div>`);
+    // on a pick, leave the window open: the name form that follows reuses it
+    let done = false; const fin = (v, close) => { if (done) return; done = true; dlg2.onclick = null; dlg2.onclose = null; if (close) closeDlg(dlg2); res(v); };
+    dlg2.onclick = e => { const b = e.target.closest('[data-r]'); if (b) b.dataset.r === 'x' ? fin(null, true) : fin(b.dataset.r, false); };
+    dlg2.onclose = () => fin(null, false);
+  });
+}
+async function addRelative() {
+  if (!T) return;
+  const me = LS.get('me');
+  const start = state.view === 'family' && state.sel && P(state.sel) ? state.sel : (state.panel && P(state.panel) ? state.panel : null);
+  const quick = [...new Set([start, me].filter(x => x && P(x)))];
+  const pid = await new Promise(res => {
+    openDlg(dlg, `<div class="dh"><h3>Add a relative</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db" style="min-height:340px">
+      <p style="margin-top:0"><b>Step 1.</b> Who is the new person related to?</p>
+      ${quick.length ? `<div class="grid" style="margin-bottom:12px">${quick.map(x => `<button class="pc" data-arp="${x}" style="--bc:${brColor(x)}">${avatar(x)}<span class="t"><b>${esc(shortName(x))}</b><small>${x === me ? 'you' : esc(context(x) || lifeYears(x))}</small></span></button>`).join('')}</div><p class="muted" style="margin:0 0 6px">…or someone else:</p>` : ''}
+      <div class="search" style="max-width:none"><input id="arQ" placeholder="Type their name…" autocomplete="off" style="padding-left:14px"${quick.length ? '' : ' autofocus'}><div class="results" id="arR"></div></div></div>`);
+    let done = false; const fin = v => { if (done) return; done = true; dlg.onclick = null; res(v); };
+    attachSearch($('#arQ'), $('#arR'), id => fin(id));
+    dlg.onclick = e => { const b = e.target.closest('[data-arp]'); if (b) fin(b.dataset.arp); else if (e.target.closest('[data-x]')) { closeDlg(dlg); fin(null); } };
+    dlg.onclose = () => fin(null);
+  });
+  if (!pid) return;
+  const name = P(pid).given, pu = parentUnion(pid);
+  const how = await new Promise(res => {
+    const opt = (k, t, d) => `<button class="btn" data-how="${k}" style="display:block;width:100%;text-align:left;margin:8px 0;padding:12px 14px"><span style="font-size:1.05rem">${t}</span><br><span class="muted" style="font-weight:400;font-size:.88rem">${d}</span></button>`;
+    openDlg(dlg, `<div class="dh"><h3>Add a relative</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">
+      <p style="margin-top:0"><b>Step 2.</b> The new person is ${esc(shortName(pid))}’s…</p>
+      ${opt('child', 'Child', `A son or daughter of ${esc(name)}`)}
+      ${opt('spouse', 'Spouse or partner', `Husband, wife or partner of ${esc(name)}, current or former`)}
+      ${opt('sibling', 'Brother or sister', pu ? `Another child of ${esc(pu.partners.map(x => P(x).given).join(' & '))}` : `${esc(name)}’s parents aren’t in the tree yet, so you’ll add a parent first`)}
+      ${opt('parent', 'Parent', pu && pu.partners.length >= 2 ? `Both of ${esc(name)}’s parents are already recorded` : `Mother or father of ${esc(name)}`)}
+      <button class="btn sm" data-back style="margin-top:6px">← Choose a different person</button></div>`);
+    let done = false; const fin = v => { if (done) return; done = true; dlg.onclick = null; closeDlg(dlg); res(v); };
+    dlg.onclick = e => { const b = e.target.closest('[data-how]'); if (b) fin(b.dataset.how); else if (e.target.closest('[data-back]')) fin('back'); else if (e.target.closest('[data-x]')) fin(null); };
+    dlg.onclose = () => fin(null);
+  });
+  if (how === 'back') return addRelative();
+  let newId = null;
+  if (how === 'child') {
+    const uid = await chooseCouple(pid, `Which couple is the child from?`);
+    if (uid === 'none') newId = await addChildTo(pid); else if (uid) newId = await addChild(uid);
+  } else if (how === 'spouse') newId = await addSpouse(pid);
+  else if (how === 'parent') newId = await addParent(pid);
+  else if (how === 'sibling') {
+    if (pu) newId = await addChild(pu.id);
+    else { toast(`First add one of ${name}’s parents, then the brother or sister.`); newId = await addParent(pid); }
+  }
+  if (newId && P(newId)) goPerson(newId);
+}
+
 /* ---------- the person editor ---------- */
 let editId = null, photoData;
 function openEditor(id) {
@@ -1297,7 +1367,7 @@ function openEditor(id) {
   conns += `<div class="row" style="margin-top:6px"><button class="btn sm" data-ed="addSpouse">+ Add a spouse / partner</button>${!unionsOf(id).length ? '<button class="btn sm" data-ed="addChildNew">+ Add a child</button>' : ''}</div>`;
   openDlg(dlg, `<div class="dh"><h3>Edit ${esc(shortName(p))}</h3><button class="iconbtn" data-ed="close" aria-label="Close">✕</button></div>
   <div class="db"><form id="pf" class="form" autocomplete="off">
-    <div class="full row" style="gap:14px">${avatar(p, true).replace('class="av lg"', 'class="av lg" id="pfAv"')}<span class="row"><button type="button" class="btn sm" data-ed="photo">📷 ${p.photo ? 'Change' : 'Add a'} photo</button>${p.photo ? '<button type="button" class="btn sm" data-ed="nophoto">Remove photo</button>' : ''}</span></div>
+    <div class="full row" style="gap:14px">${avatar(p, true).replace('class="av lg"', 'class="av lg" id="pfAv"')}<span class="row"><button type="button" class="btn sm" data-ed="photo">${p.photo ? 'Change' : 'Add a'} photo</button>${p.photo ? '<button type="button" class="btn sm" data-ed="nophoto">Remove photo</button>' : ''}</span></div>
     <label>First name<input name="given" value="${esc(p.given)}" required></label>
     <label>Middle name(s)<input name="middle" value="${esc(p.middle)}"></label>
     <label>Last name<input name="surname" value="${esc(p.surname)}"></label>
@@ -1311,7 +1381,7 @@ function openEditor(id) {
     <label class="dd">Where<input name="deathPlace" value="${esc(p.deathPlace)}"></label>
     <label class="full">Notes & stories<textarea name="notes" rows="3" placeholder="Where they lived, what they did, a favourite story…">${esc(p.notes)}</textarea></label>
   </form>${conns}
-  <div class="sec">Danger zone</div><button class="btn sm danger" data-ed="delete">🗑 Delete ${esc(p.given)} from the tree</button></div>
+  <div class="sec">Danger zone</div><button class="btn sm danger" data-ed="delete">Delete ${esc(p.given)} from the tree</button></div>
   <div class="df"><span class="muted" style="margin-right:auto;font-size:.85rem;align-self:center">Family links save right away.</span><button class="btn" data-ed="close">Cancel</button><button class="btn primary" data-ed="save">Save</button></div>`);
   const syncDD = () => $$('#dlg .dd').forEach(l => l.style.display = $('#pf [name=deceased]').checked ? '' : 'none');
   $('#pf [name=deceased]').onchange = syncDD; syncDD();
@@ -1372,7 +1442,7 @@ async function chooseMe() {
     <div class="search" style="max-width:none"><input id="meQ" autofocus placeholder="Type your name…" autocomplete="off" style="padding-left:14px"><div class="results" id="meR"></div></div>
     ${me && P(me) ? `<p style="margin-top:18px">Currently: <b>${esc(fullName(me))}</b> <button class="btn sm" data-clear>Forget me</button></p>` : ''}
     <p class="muted" style="margin-top:18px;font-size:.9rem">Not in the tree yet? Find a parent or spouse, open their card and use “+ Add a child” or “+ Add a spouse”.</p></div>`);
-  attachSearch($('#meQ'), $('#meR'), id => { LS.set('me', id); LS.set('who', shortName(id)); closeDlg(dlg2); toast(`Hi ${P(id).given}! 👋`); afterChange(); });
+  attachSearch($('#meQ'), $('#meR'), id => { LS.set('me', id); LS.set('who', shortName(id)); closeDlg(dlg2); toast(`Hi ${P(id).given}!`); afterChange(); });
   dlg2.onclick = e => { if (e.target.closest('[data-x]')) closeDlg(dlg2); if (e.target.closest('[data-clear]')) { LS.del('me'); closeDlg(dlg2); afterChange(); } };
 }
 
@@ -1394,7 +1464,7 @@ function openShare() {
       <p style="margin-top:0"><span class="dot live" style="display:inline-block"></span> <b>This tree is live.</b> Anyone who scans this code or opens the link can see and edit it, and everyone sees changes as they happen.</p>
       <div class="qr">${qrSVG(link)}</div>
       <p><input readonly value="${esc(link)}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px" onclick="this.select()"></p>
-      <div class="row"><button class="btn primary" data-copy>Copy link</button><button class="btn" data-card>🖨 Print a QR card for the table</button><button class="btn" data-backup>💾 Backup</button></div>
+      <div class="row"><button class="btn primary" data-copy>Copy link</button><button class="btn" data-card>Print a QR card for the table</button><button class="btn" data-backup>Backup</button></div>
       <p class="muted" style="font-size:.88rem">Keep the link within the family: it works like a key. Edits can always be undone, and “Recent changes” shows who changed what.</p>
       <details><summary class="muted">Disconnect this device</summary><p>This device will stop showing the shared tree (nothing is deleted for anyone else).</p><button class="btn sm danger" data-leave>Disconnect</button></details></div>`);
   } else {
@@ -1446,7 +1516,7 @@ async function connect(c, quiet) {
     else await uploadAll();
     afterChange(); show(state.view === 'welcome' ? 'tree' : state.view);
     openStream(); flush();
-    if (!quiet) toast('Connected to the family tree 🎉');
+    if (!quiet) toast('Connected to the family tree');
   } catch (err) {
     setStatus('off');
     if (!T) { renderWelcome('Couldn’t reach the family tree. Check your internet connection and try again.'); show('welcome'); }
@@ -1553,7 +1623,7 @@ document.addEventListener('click', async e => {
   }
   if (!t.closest('#menu,#menuBtn')) { $('#menu').classList.remove('open'); $('#menuBtn').setAttribute('aria-expanded', 'false'); }
 });
-$$('nav.tabs button').forEach(b => b.addEventListener('click', () => { closePanel(); show(b.dataset.view); }));
+$$('nav.tabs button[role=tab]').forEach(b => b.addEventListener('click', () => { closePanel(); show(b.dataset.view); }));
 $('#menuBtn').onclick = () => { const m = $('#menu'); m.classList.toggle('open'); $('#menuBtn').setAttribute('aria-expanded', m.classList.contains('open')); };
 $('#menu').addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return; $('#menu').classList.remove('open');
@@ -1568,13 +1638,14 @@ $('#menu').addEventListener('click', e => {
   if (a === 'print') window.print();
   if (a === 'log') openDlg(dlg, `<div class="dh"><h3>Recent changes</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">${logHTML(150)}</div>`);
   if (a === 'about') openDlg(dlg, `<div class="dh"><h3>How this works</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">
-    <p><b>Find anyone</b> with the search box. Tap a person for their details; <b>✏️ Edit</b> changes names, dates, places, photos, notes, marriages and children.</p>
-    <p><b>Views:</b> 🌳 Tree (tap +/− to open branches; drag to move, pinch or scroll to zoom) · 🌀 Fan (everyone at once) · 👪 Family (one person and their closest relatives) · 📜 List · 🔗 How are we related? · 📅 Timeline · ✍️ Fill in the gaps.</p>
-    <p><b>🙋 Who are you?</b> Pick yourself and every card shows how you’re related.</p>
-    <p><b>Saving:</b> ${conn ? 'this tree is shared live: everyone with the family link sees changes immediately, even edits made while offline once you reconnect.' : 'right now changes are saved on this device only. Use ☰ → Share with family to put it online for everyone.'} Every change can be undone, and ☰ → Recent changes shows who changed what.</p>
+    <p><b>Find anyone</b> with the search box. Tap a person for their details; <b>Edit</b> changes names, dates, places, photos, notes, marriages and children.</p>
+    <p><b>Views:</b> Tree (tap +/− to open branches; drag to move, pinch or scroll to zoom) · How are we related? · Fan (everyone at once) · Family (one person and their closest relatives) · List · Timeline · Fill in the gaps.</p><p><b>+ Add a relative</b> (top right of the tabs) adds a child, spouse, parent or brother/sister to anyone.</p>
+    <p><b>Who are you?</b> Pick yourself and every card shows how you’re related.</p>
+    <p><b>Saving:</b> ${conn ? 'this tree is shared live: everyone with the family link sees changes immediately, even edits made while offline once you reconnect.' : 'right now changes are saved on this device only. Use Menu → Share with family to put it online for everyone.'} Every change can be undone, and Menu → Recent changes shows who changed what.</p>
     <p><b>Dates</b> can be written any way (“1931”, “about 1890”, “March 4, 1952”).</p></div>`);
 });
 $('#meBtn').onclick = chooseMe;
+$('#addRelBtn').onclick = addRelative;
 $('#syncBtn').onclick = () => T ? openShare() : null;
 $('#undoBtn').onclick = undo;
 document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.target.matches('input,textarea') && !dlg.open) { e.preventDefault(); undo(); } });
