@@ -474,7 +474,7 @@ function lifeYears(p) {
   if (typeof p === 'string') p = P(p);
   const b = yearOf(p.birth), d = yearOf(p.death);
   if (b && d) return `${b}–${d}`; if (b) return p.deceased ? `${b}–?` : `b. ${b}`; if (d) return `d. ${d}`;
-  return p.deceased ? '†' : '';
+  return '';
 }
 function age(p) {
   const bd = Date.parse(p.birth); if (isNaN(bd) || !/\d{4}/.test(p.birth) || !/[a-z]|-/i.test(p.birth)) return null;
