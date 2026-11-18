@@ -11,6 +11,14 @@ Lives at `~/Documents/GitHub Sync/Goldstein-Family-Tree` (see `../CLAUDE.md` for
   `Goldstein_Family_Tree.docx`, loaded only when the page is opened from this Mac and the browser has no
   tree yet. `goldstein-tree.json` is the same data as a backup file (☰ → Open a backup).
 
+## Update files (changing the live tree without overwriting relatives' edits)
+Menu → "Apply an update file…" merges a `{type:"gft-update", title, ops:[…]}` file: `set` (person field, applied only if it
+still holds `from`), `addPerson`, `addUnion`, `setPartners`, `moveChild` (only if the child is still in `from`), `delUnion`
+(only if childless), `meta`. Skipped items are listed; the whole update is one undo step. Build one by diffing the data that
+was uploaded against the corrected data. Keep update files in `private/` (they contain family data).
+- `private/keynote-update-2026-11-18.json`: details from `~/Documents/Family/FAMILY TREE/Family Tree 4:17:08.key`
+  (2008–09 chart: years, middle names, surnames) plus Adam's answers to the conflicts (Nov 18 2026).
+
 ## Where the family's data lives
 The repo is public, so it holds **no family data**. Visitors without the family link see a welcome page.
 - On one device: the browser's localStorage.

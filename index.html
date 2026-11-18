@@ -310,6 +310,7 @@ dialog#lightbox::backdrop{background:#000a}
         <hr>
         <button data-act="backup" role="menuitem">Download a backup (.json)</button>
         <button data-act="import" role="menuitem">Open a backup…</button>
+        <button data-act="update" role="menuitem">Apply an update file…</button>
         <button data-act="gedcom" role="menuitem">Export for Ancestry / FamilySearch (.ged)</button>
         <button data-act="svg" role="menuitem">Download the full chart (poster .svg)</button>
         <button data-act="print" role="menuitem">Print this view</button>
@@ -367,6 +368,7 @@ dialog#lightbox::backdrop{background:#000a}
 <dialog id="lightbox" aria-label="Photo"></dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
+<input type="file" id="updIn" accept=".json,application/json" hidden>
 <input type="file" id="photoIn" accept="image/*" hidden>
 
 <script src="qrcode.js"></script>
@@ -588,10 +590,16 @@ async function flush() {
   while (pending.length) {
     setStatus('busy');
     const c = pending[0];
+    let n = 1;
+    if (!c.abs) while (n < pending.length && n < 150 && !pending[n].abs) n++;
     try {
-      const r = await fetch(c.abs || url(c.path), c.v == null ? { method: 'DELETE' } : { method: 'PUT', body: JSON.stringify(c.v) });
+      let r;
+      if (n > 1) { // many edits at once (e.g. an update file): one multi-location update
+        const body = {}; for (let i = 0; i < n; i++) body[pending[i].path] = pending[i].v ?? null;
+        r = await fetch(url(''), { method: 'PATCH', body: JSON.stringify(body) });
+      } else r = await fetch(c.abs || url(c.path), c.v == null ? { method: 'DELETE' } : { method: 'PUT', body: JSON.stringify(c.v) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      pending.shift(); LS.set('pending', pending);
+      pending.splice(0, n); LS.set('pending', pending);
     } catch (e) {
       flushing = false; setStatus('off');
       retryT = setTimeout(flush, 8000); return;
@@ -620,11 +628,11 @@ function openStream() {
 function applyRemote(path, data, merge) {
   const seg = path.split('/').filter(Boolean);
   if (!seg.length) {
-    if (merge) { for (const k in data) applyRemote('/' + k, data[k], false); return; }
+    if (merge) { for (const k in data) setAt(k.split('/').filter(Boolean), data[k]); for (const kk of ['people', 'unions']) for (const id in T[kk]) T[kk][id] = kk === 'people' ? normPerson(T[kk][id], id) : normUnion(T[kk][id], id); saveLocal(); afterChange(true); return; }
     if (data == null) { if (T) { toast('The shared tree is empty — uploading this copy.'); uploadAll(); } return; }
     T = normTree(data);
     for (const c of pending) if (c.path) setAt(c.path.split('/'), c.v); // keep my unsent edits on top
-  } else if (merge) { for (const k in data) setAt([...seg, k], data[k]); }
+  } else if (merge) { for (const k in data) setAt([...seg, ...k.split('/').filter(Boolean)], data[k]); }
   else setAt(seg, data);
   for (const k of ['people', 'unions']) for (const id in T[k]) T[k][id] = k === 'people' ? normPerson(T[k][id], id) : normUnion(T[k][id], id);
   saveLocal(); afterChange(true);
@@ -657,7 +665,7 @@ function commit(changes, label, opts = {}) {
   const before = changes.map(c => ({ k: c.k, id: c.id, v: clone(T[c.k][c.id]) ?? null }));
   for (const c of changes) {
     if (c.v == null) delete T[c.k][c.id];
-    else T[c.k][c.id] = c.k === 'people' ? normPerson(clone(c.v), c.id) : normUnion(clone(c.v), c.id);
+    else T[c.k][c.id] = c.k === 'people' ? normPerson(clone(c.v), c.id) : c.k === 'unions' ? normUnion(clone(c.v), c.id) : clone(c.v);
   }
   if (opts.undo !== false) { undoStack.push({ label, changes: before }); if (undoStack.length > 60) undoStack.shift(); }
   const lid = Date.now().toString(36) + rid('', 4);
@@ -1613,6 +1621,66 @@ function chartSVG() {
   return out;
 }
 
+/* ---------- update files: merge prepared changes into the tree without overwriting newer edits ----------
+   { type:"gft-update", title, ops:[ {op:"set", id, f, from, to} | {op:"addPerson", p} | {op:"addUnion", u}
+     | {op:"setPartners", id, from, to} | {op:"moveChild", c, from, to} | {op:"delUnion", id} | {op:"meta", f, from, to} ] }
+   A change is made only if that spot still holds the "from" value; otherwise it's skipped and listed. */
+function planUpdate(upd) {
+  const work = new Map(); // "people/id" -> working copy (null = delete)
+  const get = (k, id) => { const key = k + '/' + id; if (!work.has(key)) work.set(key, T[k][id] ? clone(T[k][id]) : undefined); return work.get(key); };
+  const put = (k, id, v) => work.set(k + '/' + id, v);
+  const same = (a, b) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
+  const nameOf = id => { const p = get('people', id); return p ? [p.given, p.surname].filter(Boolean).join(' ') : id; };
+  const FIELD = { given: 'first name', middle: 'middle name', surname: 'last name', birthSurname: 'birth surname', nick: 'nickname', birth: 'birth date', death: 'death date', birthPlace: 'birthplace', deceased: 'passed away', notes: 'notes', parentsUncertain: '“which marriage?” flag' };
+  const parentOf = c => { const ids = new Set([...Object.keys(T.unions), ...[...work.keys()].filter(k => k.startsWith('unions/')).map(k => k.slice(7))]); for (const id of ids) { const u = get('unions', id); if (u && u.children.includes(c)) return id; } return null; };
+  let done = 0; const skipped = [];
+  for (const o of upd.ops || []) {
+    if (o.op === 'addPerson') { if (get('people', o.p.id)) continue; put('people', o.p.id, normPerson(clone(o.p), o.p.id)); done++; }
+    else if (o.op === 'addUnion') { if (get('unions', o.u.id)) continue; if (!o.u.partners.every(x => get('people', x))) { skipped.push('A marriage for someone who has since been removed'); continue; } put('unions', o.u.id, normUnion(clone(o.u), o.u.id)); done++; }
+    else if (o.op === 'set') {
+      const p = get('people', o.id); if (!p) { skipped.push(`${o.id}: person was deleted`); continue; }
+      if (same(p[o.f], o.to)) continue;
+      if (same(p[o.f], o.from)) { p[o.f] = o.to; done++; } else skipped.push(`${nameOf(o.id)}: ${FIELD[o.f] || o.f} is already “${p[o.f] === true ? 'yes' : p[o.f]}” (update says “${o.to}”)`);
+    }
+    else if (o.op === 'setPartners') { const u = get('unions', o.id); if (!u) continue; if (same(u.partners, o.to)) continue; if (same(u.partners, o.from)) { u.partners = [...o.to]; done++; } else skipped.push(`Marriage of ${u.partners.map(nameOf).join(' & ')} was already changed`); }
+    else if (o.op === 'moveChild') {
+      if (!get('people', o.c)) continue;
+      const cur = parentOf(o.c); if (cur === o.to) continue;
+      const to = get('unions', o.to); if (!to) { skipped.push(`${nameOf(o.c)}: target family no longer exists`); continue; }
+      if (cur !== (o.from || null)) { skipped.push(`${nameOf(o.c)}: parents were already changed to ${cur ? get('unions', cur).partners.map(nameOf).join(' & ') : 'none'}`); continue; }
+      if (cur) { const f = get('unions', cur); f.children = f.children.filter(x => x !== o.c); }
+      to.children.push(o.c); done++;
+    }
+    else if (o.op === 'delUnion') { const u = get('unions', o.id); if (!u) continue; if (u.children.length) { skipped.push(`Marriage of ${u.partners.map(nameOf).join(' & ')} still has children, kept`); continue; } put('unions', o.id, null); done++; }
+    else if (o.op === 'meta') { if (same(T.meta[o.f], o.to)) continue; if (same(T.meta[o.f], o.from)) { put('meta', o.f, o.to); done++; } else skipped.push(`Tree ${o.f} was already changed`); }
+  }
+  const changes = [];
+  for (const [key, v] of work) {
+    const [k, id] = [key.slice(0, key.indexOf('/')), key.slice(key.indexOf('/') + 1)];
+    const before = T[k][id];
+    if (v === undefined || same(before, v)) continue;
+    changes.push({ k, id, v: v ?? null });
+  }
+  return { changes, done, skipped };
+}
+$('#updIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !T) return;
+  let upd; try { upd = JSON.parse(await f.text()); } catch (_) { upd = null; }
+  if (!upd || upd.type !== 'gft-update') return toast('That isn’t an update file for this tree.');
+  const plan = planUpdate(upd);
+  const list = arr => arr.length ? `<details style="margin-top:10px"><summary>${arr.length} skipped because someone already edited them</summary><ul style="font-size:.9rem;margin:8px 0 0;padding-left:20px">${arr.map(s => `<li>${esc(s)}</li>`).join('')}</ul></details>` : '';
+  openDlg(dlg, `<div class="dh"><h3>Apply update</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">
+    <p style="margin-top:0"><b>${esc(upd.title || f.name)}</b></p>
+    ${plan.changes.length ? `<p>This will make <b>${plan.done}</b> change${plan.done === 1 ? '' : 's'} to <b>${plan.changes.length}</b> people and families${conn ? ', for everyone' : ''}. You can undo it right after.</p>` : '<p>Everything in this update is already in the tree.</p>'}
+    ${list(plan.skipped)}</div>
+    <div class="df"><button class="btn" data-x>Cancel</button>${plan.changes.length ? '<button class="btn primary" data-applyupd>Apply update</button>' : ''}</div>`);
+  dlg.onclick = ev => {
+    if (!ev.target.closest('[data-applyupd]')) return;
+    dlg.onclick = null; closeDlg(dlg);
+    commit(planUpdate(upd).changes, upd.title || 'Applied an update');
+  };
+});
+
 /* ---------- welcome (no tree on this device yet) ---------- */
 function renderWelcome(msg) {
   $('#welcome').innerHTML = `<h2>Family Tree</h2>${msg ? `<p class="warnbox">${esc(msg)}</p>` : ''}
@@ -1663,6 +1731,7 @@ $('#menu').addEventListener('click', e => {
   if (a === 'big') { document.body.classList.toggle('big'); LS.set('big', document.body.classList.contains('big')); treeFitted = fanFitted = false; render(); }
   if (a === 'backup') download(`${slug()}-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(T, null, 1), 'application/json');
   if (a === 'import') $('#fileIn').click();
+  if (a === 'update') $('#updIn').click();
   if (a === 'gedcom') download(`${slug()}.ged`, gedcom(), 'text/plain');
   if (a === 'svg') { const prev = state.view; show('tree'); download(`${slug()}-chart.svg`, chartSVG(), 'image/svg+xml'); show(prev); }
   if (a === 'print') window.print();
