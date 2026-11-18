@@ -340,6 +340,8 @@ dialog#lightbox::backdrop{background:#000a}
   <section class="view canvas" id="v-tree" role="tabpanel">
     <svg class="stage" id="treeSvg" aria-label="Family tree chart"><g id="treeG"></g></svg>
     <div class="ctools">
+      <button class="pill" id="showAll">Show all</button>
+      <button class="pill" id="collapseAll">Collapse all</button>
       <label class="pill gensel">Show <select id="genSel" aria-label="How many generations to show"></select></label>
       <button class="pill" id="treeMe" hidden>Find me</button>
     </div>
@@ -1785,6 +1787,9 @@ $('#treeSvg').addEventListener('click', e => {
 });
 $('#treeSvg').addEventListener('keydown', e => { const n = e.target.closest('.node'); if (n && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openPanel(n.dataset.id); } });
 $('#fanSvg').addEventListener('click', e => { const n = e.target.closest('[data-id]'); if (n) openPanel(n.dataset.id); });
+const showGens = n => { state.collapsed = collapsedFor(n); saveCollapsed(); renderTree(); fitTreeNice(); };
+$('#showAll').onclick = () => showGens(Infinity);
+$('#collapseAll').onclick = () => showGens(1);
 $('#genSel').addEventListener('change', e => {
   const v = e.target.value; if (v === 'custom') return;
   state.collapsed = collapsedFor(v === 'all' ? Infinity : +v); saveCollapsed(); renderTree(); fitTreeNice();
