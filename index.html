@@ -1576,7 +1576,9 @@ function download(name, text, type) { const a = document.createElement('a'); a.h
 $('#fileIn').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try {
-    const data = normTree(JSON.parse(await f.text()));
+    const raw = JSON.parse(await f.text());
+    if (raw && raw.type === 'gft-update') { if (T) showUpdate(raw, f.name); else toast('Open the family tree first, then apply the update.'); return; }
+    const data = normTree(raw);
     if (!Object.keys(data.people).length) throw new Error('no people');
     if (T && !(await confirmBox(`Replace the current tree${conn ? ' <b>for everyone</b>' : ''} with “${esc(f.name)}” (${Object.keys(data.people).length} people)? Download a backup first if you’re unsure.`, 'Replace', true))) return;
     T = data; undoStack.length = 0;
@@ -1666,7 +1668,12 @@ function planUpdate(upd) {
 $('#updIn').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || !T) return;
   let upd; try { upd = JSON.parse(await f.text()); } catch (_) { upd = null; }
+  if (upd && upd.type !== 'gft-update' && upd.people) return toast('That’s a full backup — use Menu → Open a backup… instead.');
   if (!upd || upd.type !== 'gft-update') return toast('That isn’t an update file for this tree.');
+  showUpdate(upd, f.name);
+});
+function showUpdate(upd, fname) {
+  const f = { name: fname };
   const plan = planUpdate(upd);
   const list = arr => arr.length ? `<details style="margin-top:10px"><summary>${arr.length} skipped because someone already edited them</summary><ul style="font-size:.9rem;margin:8px 0 0;padding-left:20px">${arr.map(s => `<li>${esc(s)}</li>`).join('')}</ul></details>` : '';
   openDlg(dlg, `<div class="dh"><h3>Apply update</h3><button class="iconbtn" data-x aria-label="Close">✕</button></div><div class="db">
@@ -1679,7 +1686,8 @@ $('#updIn').addEventListener('change', async e => {
     dlg.onclick = null; closeDlg(dlg);
     commit(planUpdate(upd).changes, upd.title || 'Applied an update');
   };
-});
+  dlg.onclose = () => { dlg.onclick = null; };
+}
 
 /* ---------- welcome (no tree on this device yet) ---------- */
 function renderWelcome(msg) {
