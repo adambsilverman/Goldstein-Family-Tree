@@ -273,6 +273,24 @@ dialog#lightbox::backdrop{background:#000a}
 #lightbox figcaption{font-size:1rem;color:#ddd;text-align:center}
 #lightbox .lbx{position:fixed;top:10px;right:12px;color:#fff;background:#0006;z-index:2}
 #lightbox .lbx:hover{background:#000a;color:#fff}
+/* attachments */
+.atts{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}
+.att{display:flex;gap:8px;align-items:center}
+.attopen{flex:1;min-width:0;display:flex;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--card);padding:8px 10px;cursor:pointer}
+.attopen:hover{border-color:var(--accent)}
+.attk{flex:none;font:700 .68rem "IBM Plex Sans",sans-serif;letter-spacing:.06em;background:var(--ink);color:#fff;padding:4px 6px;min-width:46px;text-align:center}
+.atttitle{width:100%;padding:6px 8px;border:1.5px solid var(--line);background:#fff;font:inherit;font-weight:600;margin-bottom:2px}
+.attt{min-width:0}.attt b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.attt small{color:var(--muted);font-size:.8rem}
+#lightbox .lbfile{width:min(1000px,96vw);max-height:100vh;display:flex;flex-direction:column;gap:10px;padding:56px 12px 16px;box-sizing:border-box}
+#lightbox .lbhead{color:#eee}#lightbox .lbhead span{color:#aaa;font-size:.9rem;margin-left:6px}
+#lightbox .lbbody{display:flex;flex-direction:column;align-items:center;gap:12px}
+#lightbox .lbbody img{max-width:100%;max-height:calc(100vh - 190px);cursor:default}
+#lightbox .lbbody iframe{width:100%;height:calc(100vh - 190px);border:0;background:#fff}
+#lightbox .lbbody video{max-width:100%;max-height:calc(100vh - 190px)}
+#lightbox .lbbody audio{width:min(520px,90vw)}
+#lightbox .lbtext{background:#fff;color:#222;padding:16px 18px;max-width:100%;width:min(760px,92vw);max-height:calc(100vh - 190px);overflow:auto;white-space:pre-wrap;font:15px/1.5 "IBM Plex Sans",sans-serif;margin:0}
+#lightbox .lbmsg{color:#ccc;text-align:center;margin:40px 0}
+#lightbox .lbacts{display:flex;gap:8px}
 @media print{
   header.top,nav.tabs,.tools,.ctools,#panel,.legend{display:none!important}
   body{overflow:visible;display:block;height:auto}
@@ -373,6 +391,7 @@ dialog#lightbox::backdrop{background:#000a}
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
 <input type="file" id="updIn" accept=".json,application/json" hidden>
 <input type="file" id="photoIn" accept="image/*" hidden>
+<input type="file" id="attachIn" multiple hidden>
 
 <script src="qrcode.js"></script>
 <script src="private/goldstein-seed.js" onerror="void 0"></script>
@@ -407,7 +426,7 @@ const brColor = pid => { const b = IX.branch[pid]; return b == null || b < 0 ? '
 /* ---------- normalising (Firebase turns arrays into objects and drops empty ones) ---------- */
 const arr = x => Array.isArray(x) ? x.filter(v => v != null) : (x && typeof x === 'object') ? Object.keys(x).sort((a, b) => a - b).map(k => x[k]).filter(v => v != null) : [];
 const PF = ['given', 'middle', 'surname', 'birthSurname', 'nick', 'sex', 'birth', 'birthPlace', 'death', 'deathPlace', 'notes', 'photo', 'photoV'];
-function normPerson(p, id) { p = p || {}; p.id = id; for (const f of PF) if (typeof p[f] !== 'string') p[f] = p[f] == null ? '' : String(p[f]); p.deceased = !!p.deceased || !!p.death; p.parentsUncertain = !!p.parentsUncertain; return p; }
+function normPerson(p, id) { p = p || {}; p.id = id; for (const f of PF) if (typeof p[f] !== 'string') p[f] = p[f] == null ? '' : String(p[f]); p.deceased = !!p.deceased || !!p.death; p.parentsUncertain = !!p.parentsUncertain; if (!p.files || typeof p.files !== 'object') p.files = {}; return p; }
 function normUnion(u, id) { u = u || {}; u.id = id; u.partners = arr(u.partners); u.children = arr(u.children); for (const f of ['married', 'place', 'ended', 'endDate', 'notes']) if (typeof u[f] !== 'string') u[f] = u[f] == null ? '' : String(u[f]); return u; }
 function normTree(t) {
   t = t || {}; t.meta = t.meta || {}; t.people = t.people || {}; t.unions = t.unions || {}; t.log = t.log || {};
@@ -931,6 +950,7 @@ function renderFamily() {
     ${rel ? `<div style="margin-top:6px"><span class="badge me">${esc(rel)}</span></div>` : ''}
     ${p.notes ? `<p style="margin:8px 0 0;white-space:pre-wrap">${esc(p.notes)}</p>` : ''}</div>
     <div class="acts row"><button class="btn primary" data-act="edit" data-id="${id}">Edit</button><button class="btn" data-act="tree" data-id="${id}">Show in tree</button><button class="btn" data-act="relate" data-id="${id}">How related?</button></div></div>`;
+  h += `<div class="sec">Documents & attachments${fileList(p).length ? ` <span class="badge">${fileList(p).length}</span>` : ''}</div><div class="card" style="padding:12px 14px">${filesHTML(id)}</div>`;
   const us = unionsOf(id);
   h += `<div class="sec">${us.length > 1 ? 'Marriages & partners' : 'Spouse / partner'}</div>`;
   if (!us.length) h += `<p class="muted">None recorded.</p>`;
@@ -1125,6 +1145,7 @@ function openPanel(id) {
     ${p.notes ? `<p style="white-space:pre-wrap">${esc(p.notes)}</p>` : ''}
     <div class="row" style="margin:12px 0"><button class="btn primary" data-act="edit" data-id="${id}">Edit</button><button class="btn" data-go="${id}">Family</button><button class="btn" data-act="tree" data-id="${id}">Tree</button><button class="btn" data-act="relate" data-id="${id}">How related?</button></div>
     ${p.parentsUncertain ? uncertainBox(id) : ''}
+    <div class="sec">Documents & attachments</div>${filesHTML(id, { empty: 'None yet.' })}
     ${par.length ? `<div class="sec">Parents</div>${par.map(x => pcard(x)).join('')}` : ''}
     ${spouses(id).length ? `<div class="sec">Spouse / partner</div>${spouses(id).map(x => pcard(x)).join('')}` : ''}
     ${childrenOf(id).length ? `<div class="sec">Children</div>${childrenOf(id).map(x => pcard(x)).join('')}` : ''}`;
@@ -1435,6 +1456,7 @@ function openEditor(id) {
     <label class="dd">Where<input name="deathPlace" value="${esc(p.deathPlace)}"></label>
     <label class="full">Notes & stories<textarea name="notes" rows="3" placeholder="Where they lived, what they did, a favourite story…">${esc(p.notes)}</textarea></label>
   </form>${conns}
+  <div class="sec">Documents & attachments</div><div class="conn">${filesHTML(id, { edit: true })}<p class="muted" style="margin:8px 0 0;font-size:.85rem">Certificates, letters, scans, PDFs, recordings: up to 7 MB each. Files save right away.</p></div>
   <div class="sec">Danger zone</div><button class="btn sm danger" data-ed="delete">Delete ${esc(p.given)} from the tree</button></div>
   <div class="df"><span class="muted" style="margin-right:auto;font-size:.85rem;align-self:center">Family links save right away.</span><button class="btn" data-ed="close">Cancel</button><button class="btn primary" data-ed="save">Save</button></div>`);
   const syncDD = () => $$('#dlg .dd').forEach(l => l.style.display = $('#pf [name=deceased]').checked ? '' : 'none');
@@ -1447,6 +1469,8 @@ function saveEditor(close = true) {
   np.deceased = f.elements.deceased.checked || !!np.death;
   if (!np.given) { f.elements.given.focus(); return; }
   if (photoData !== undefined) np.photo = photoData;
+  const ft = $$('#dlg [data-ftitle]');
+  if (ft.length && np.files) { np.files = clone(np.files); for (const i of ft) { const f = np.files[i.dataset.ftitle]; if (f && i.value.trim()) f.title = i.value.trim(); } }
   if (photoFull === null) { if (p.photoV) deleteFullPhoto(editId); np.photoV = ''; }
   else if (photoFull) { np.photoV = Date.now().toString(36); saveFullPhoto(editId, photoFull, np.photoV); }
   const ch = [];
@@ -1684,6 +1708,7 @@ function planUpdate(upd) {
       if (a.photo && !b.photo) { b.photo = a.photo; b.photoV = a.photoV; }
       if (a.notes && b.notes && !b.notes.includes(a.notes)) b.notes += '\n' + a.notes;
       b.deceased = b.deceased || a.deceased;
+      if (a.files && Object.keys(a.files).length) b.files = { ...(b.files || {}), ...a.files };
       const ids = new Set([...Object.keys(T.unions), ...[...work.keys()].filter(k => k.startsWith('unions/')).map(k => k.slice(7))]);
       for (const id of ids) { const u = get('unions', id); if (!u) continue;
         if (u.partners.includes(o.from)) u.partners = [...new Set(u.partners.map(x => x === o.from ? o.into : x))];
@@ -1891,7 +1916,7 @@ const IDB = (() => {
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
   const run = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('p', mode); const req = fn(t.objectStore('p')); t.oncomplete = () => res(req.result); t.onerror = () => rej(t.error); }); };
-  return { get: k => run('readonly', s => s.get(k)).catch(() => null), put: (k, v) => run('readwrite', s => s.put(v, k)).catch(() => null), del: k => run('readwrite', s => s.delete(k)).catch(() => null) };
+  return { keys: () => run('readonly', s => s.getAllKeys()).catch(() => []), get: k => run('readonly', s => s.get(k)).catch(() => null), put: (k, v) => run('readwrite', s => s.put(v, k)).catch(() => null), del: k => run('readwrite', s => s.delete(k)).catch(() => null) };
 })();
 const photoKey = pid => (conn ? conn.key : 'local') + ':' + pid;
 const photoUrl = pid => `${conn.db}/trees/${conn.key}_photos/${pid}.json`;
@@ -2005,6 +2030,147 @@ lb.addEventListener('click', e => {
 lb.addEventListener('close', () => lb.classList.remove('actual'));
 document.addEventListener('click', e => { const z = e.target.closest('[data-zoom]'); if (z) { e.preventDefault(); e.stopPropagation(); openLightbox(z.dataset.zoom); } }, true);
 document.addEventListener('keydown', e => { const z = e.target.closest && e.target.closest('[data-zoom]'); if (z && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openLightbox(z.dataset.zoom); } });
+
+/* ================================================================
+   Attachments: documents, scans, PDFs, recordings on a person.
+   The list (name, title, type, size, who added it) lives on the person:
+     person.files = { fileId: {name, title, type, size, t, by} }
+   The file itself is stored apart and only downloaded when opened:
+     shared tree: <db>/trees/<key>_files/<fileId> = {name, type, data}
+     this device: IndexedDB (also the cache, and the queue for uploads
+     that couldn't go out yet).
+   ================================================================ */
+const FILE_MAX = 7 * 1024 * 1024;   // Firebase stores each file as text: keep well under its 10 MB limit
+const fileScope = () => conn ? conn.key : 'local';
+const fileUrl = fid => `${conn.db}/trees/${conn.key}_files/${fid}.json`;
+let attachFor = null, uploadsWaiting = 0, pumpT = null;
+
+const kindOf = f => {
+  const t = (f.type || '').toLowerCase(), n = (f.name || '').toLowerCase();
+  if (t.startsWith('image/')) return 'IMG';
+  if (t === 'application/pdf' || n.endsWith('.pdf')) return 'PDF';
+  if (t.startsWith('audio/')) return 'AUDIO';
+  if (t.startsWith('video/')) return 'VIDEO';
+  if (/\.(docx?|pages|rtf|odt)$/.test(n)) return 'DOC';
+  if (/\.(xlsx?|numbers|csv)$/.test(n)) return 'SHEET';
+  if (t.startsWith('text/') || n.endsWith('.txt')) return 'TEXT';
+  return 'FILE';
+};
+const sizeStr = b => b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+const fileList = p => Object.entries((typeof p === 'string' ? P(p) : p).files || {}).map(([id, f]) => ({ id, ...f })).sort((a, b) => (a.t || 0) - (b.t || 0));
+const readAsDataURL = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+
+// big photos of documents are shrunk to 2400 px (still easy to read), everything else is kept as is
+async function prepareFile(file) {
+  if (file.type.startsWith('image/') && !/gif|svg/.test(file.type) && file.size > 1.5 * 1048576) {
+    try {
+      const u = URL.createObjectURL(file); const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = u; });
+      const k = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+      return { blob, type: 'image/jpeg', name: file.name.replace(/\.(heic|heif|png|webp|tiff?)$/i, '.jpg') };
+    } catch (e) { /* fall through and keep the original */ }
+  }
+  return { blob: file, type: file.type || 'application/octet-stream', name: file.name };
+}
+async function attachFiles(pid, files) {
+  const p = P(pid); if (!p || !files.length) return;
+  const added = {}, tooBig = [];
+  toast(`Adding ${files.length} file${files.length > 1 ? 's' : ''}…`);
+  for (const file of files) {
+    const f = await prepareFile(file);
+    if (f.blob.size > FILE_MAX) { tooBig.push(file.name); continue; }
+    const fid = rid('f'), data = await readAsDataURL(f.blob);
+    const rec = { name: f.name, type: f.type, data };
+    await IDB.put('file:' + fileScope() + ':' + fid, rec);
+    if (conn) await IDB.put('upq:' + fid, { abs: fileUrl(fid), body: rec });
+    added[fid] = { name: f.name, title: f.name.replace(/\.[^.]+$/, ''), type: f.type, size: f.blob.size, t: Date.now(), by: who() };
+  }
+  if (Object.keys(added).length) {
+    const cur = P(pid);
+    commit([putP({ ...cur, files: { ...(cur.files || {}), ...added } })], `Attached ${Object.values(added).map(f => f.title).join(', ')} to ${shortName(cur)}`);
+    pumpUploads();
+  }
+  if (tooBig.length) setTimeout(() => toast(`Too big to attach (7 MB limit): ${tooBig.join(', ')}`), 3300);
+}
+async function removeAttachment(pid, fid) {
+  const p = P(pid); if (!p || !p.files || !p.files[fid]) return;
+  const f = p.files[fid];
+  if (!(await confirmBox(`Remove the attachment <b>${esc(f.title || f.name)}</b> from ${esc(shortName(p))}?`, 'Remove', true))) return;
+  const files = { ...p.files }; delete files[fid];
+  commit([putP({ ...p, files })], `Removed the attachment ${f.title || f.name} from ${shortName(p)}`);
+  IDB.del('file:' + fileScope() + ':' + fid); IDB.del('upq:' + fid);
+  if (conn) { pending.push({ abs: fileUrl(fid), v: null }); LS.set('pending', pending); flush(); }
+}
+// send files that haven't reached the shared tree yet (they wait in IndexedDB, not in the small localStorage queue)
+async function pumpUploads() {
+  clearTimeout(pumpT); if (!conn) return;
+  const keys = (await IDB.keys()).filter(k => String(k).startsWith('upq:'));
+  uploadsWaiting = keys.length; if (!keys.length) { if (statusNow === 'busy' && !pending.length) setStatus('live'); return; }
+  setStatus('busy');
+  for (const k of keys) {
+    const job = await IDB.get(k); if (!job) continue;
+    try { const r = await fetch(job.abs, { method: 'PUT', body: JSON.stringify(job.body) }); if (!r.ok) throw new Error(r.status); await IDB.del(k); uploadsWaiting--; }
+    catch (e) { setStatus('off'); pumpT = setTimeout(pumpUploads, 15000); return; }
+  }
+  if (!pending.length) setStatus('live');
+}
+async function loadFile(fid) {
+  const c = await IDB.get('file:' + fileScope() + ':' + fid); if (c && c.data) return c;
+  if (!conn) return null;
+  try { const r = await fetch(fileUrl(fid)); const j = r.ok ? await r.json() : null; if (j && j.data) { IDB.put('file:' + fileScope() + ':' + fid, j); return j; } } catch (e) {}
+  return null;
+}
+const dataUrlToBlob = async u => (await fetch(u)).blob();
+
+/* ---------- viewing ---------- */
+async function openAttachment(pid, fid) {
+  const p = P(pid), f = p && p.files && p.files[fid]; if (!f) return;
+  const k = kindOf(f);
+  lb.innerHTML = `<button class="iconbtn lbx" data-lbx aria-label="Close">✕</button><div class="lbfile"><div class="lbhead"><b>${esc(f.title || f.name)}</b> <span>${esc(shortName(p))} · ${sizeStr(f.size || 0)}</span></div><div class="lbbody"><p class="lbmsg">Loading…</p></div></div>`;
+  if (!lb.open) lb.showModal();
+  const rec = await loadFile(fid);
+  const body = lb.querySelector('.lbbody'); if (!body) return;
+  if (!rec) { body.innerHTML = `<p class="lbmsg">This file isn’t available right now${conn ? ' — check the internet connection and try again' : ' on this device'}.</p>`; return; }
+  const blob = await dataUrlToBlob(rec.data); const u = URL.createObjectURL(blob);
+  lb.addEventListener('close', () => URL.revokeObjectURL(u), { once: true });
+  const dl = `<a class="btn primary" href="${u}" download="${esc(f.name)}">Download</a>`;
+  body.innerHTML =
+    k === 'IMG' ? `<img src="${u}" alt="${esc(f.title || f.name)}">` :
+    k === 'PDF' ? `<iframe src="${u}" title="${esc(f.title || f.name)}"></iframe>` :
+    k === 'AUDIO' ? `<audio controls src="${u}"></audio>` :
+    k === 'VIDEO' ? `<video controls src="${u}"></video>` :
+    k === 'TEXT' ? `<pre class="lbtext">${esc(await blob.text())}</pre>` :
+    `<p class="lbmsg">No preview for this kind of file. Download it to open it.</p>`;
+  body.insertAdjacentHTML('beforeend', `<div class="lbacts">${dl}${k === 'PDF' ? `<a class="btn" href="${u}" target="_blank" rel="noopener">Open in a new tab</a>` : ''}</div>`);
+}
+
+/* ---------- lists shown on a person ---------- */
+function filesHTML(pid, opts = {}) {
+  const list = fileList(pid);
+  const meta = f => [sizeStr(f.size || 0), f.by && f.by !== 'someone' ? 'added by ' + esc(f.by) : '', f.t ? new Date(f.t).toLocaleDateString() : ''].filter(Boolean).join(' · ');
+  const rows = list.map(f => opts.edit
+    ? `<li class="att"><span class="attk">${kindOf(f)}</span><span class="attt" style="flex:1"><input class="atttitle" data-ftitle="${f.id}" value="${esc(f.title || f.name)}" aria-label="Name of this attachment"><small>${meta(f)}</small></span><button class="btn sm" type="button" data-att="${pid}|${f.id}">Open</button><button class="btn sm danger" type="button" data-attdel="${pid}|${f.id}" aria-label="Remove ${esc(f.title || f.name)}">Remove</button></li>`
+    : `<li class="att"><button class="attopen" data-att="${pid}|${f.id}"><span class="attk">${kindOf(f)}</span><span class="attt"><b>${esc(f.title || f.name)}</b><small>${meta(f)}</small></span></button></li>`).join('');
+  return `${list.length ? `<ul class="atts">${rows}</ul>` : `<p class="muted" style="margin:0 0 8px">${opts.empty || 'No documents, letters, certificates or recordings yet.'}</p>`}
+    <button class="btn sm" data-attadd="${pid}">+ Add files</button>`;
+}
+document.addEventListener('click', e => {
+  const o = e.target.closest('[data-att]'); if (o) { const [pid, fid] = o.dataset.att.split('|'); return openAttachment(pid, fid); }
+  const d = e.target.closest('[data-attdel]'); if (d) { const [pid, fid] = d.dataset.attdel.split('|'); return removeAttachment(pid, fid).then(() => { if (dlg.open && editId === pid && P(pid)) openEditor(pid); }); }
+  const a = e.target.closest('[data-attadd]'); if (a) { attachFor = a.dataset.attadd; $('#attachIn').click(); }
+});
+$('#attachIn').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = ''; const pid = attachFor; attachFor = null;
+  if (!pid || !files.length) return;
+  if (dlg.open && editId === pid) saveEditor(false);
+  await attachFiles(pid, files);
+  if (dlg.open && editId === pid && P(pid)) openEditor(pid);
+});
+window.addEventListener('online', () => pumpUploads());
+setTimeout(pumpUploads, 3000);
 </script>
 </body>
 </html>

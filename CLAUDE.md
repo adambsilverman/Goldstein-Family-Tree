@@ -30,6 +30,9 @@ The repo is public, so it holds **no family data**. Visitors without the family 
 - Photos: `person.photo` is a 320 px square crop (data URL) kept in the tree. The full-size original
   (max 1600 px) is stored apart so the tree stays light: shared at `<db>/trees/<key>_photos/<id>` = {v, data},
   locally in IndexedDB `gft-photos`; `person.photoV` is its version. Backups (.json) hold only the crops.
+- Attachments: `person.files = {id: {name, title, type, size, t, by}}` in the tree; the file itself (max 7 MB, big
+  photos shrunk to 2400 px) at `<db>/trees/<key>_files/<id>` = {name, type, data}, cached in IndexedDB. Uploads that
+  can't go out yet wait in IndexedDB (`upq:<id>`), not localStorage. Backups (.json) hold only the list, not the files.
 - Firebase turns arrays into objects and drops empty ones: always go through normPerson/normUnion.
 
 ## Rules
