@@ -251,6 +251,25 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
   .ladder{grid-template-columns:1fr}
   .legend{display:none}
 }
+/* photo crop & viewer */
+.av[data-zoom]{cursor:zoom-in}
+.crop{position:relative;width:min(340px,78vw);aspect-ratio:1;overflow:hidden;background:#1d1a17;margin:0 auto;touch-action:none;cursor:grab}
+.crop.drag{cursor:grabbing}
+.crop img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;user-select:none;-webkit-user-select:none;pointer-events:none}
+.cropgrid{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 2px #fff;
+  background:linear-gradient(#ffffff59,#ffffff59) 33.33% 0/1px 100% no-repeat,linear-gradient(#ffffff59,#ffffff59) 66.66% 0/1px 100% no-repeat,
+  linear-gradient(#ffffff59,#ffffff59) 0 33.33%/100% 1px no-repeat,linear-gradient(#ffffff59,#ffffff59) 0 66.66%/100% 1px no-repeat}
+.zoomrow{display:flex;gap:10px;align-items:center;width:min(340px,78vw);margin:14px auto 0}
+.zoomrow input{flex:1;accent-color:var(--accent)}
+dialog#lightbox{max-width:100vw;max-height:100vh;width:100vw;height:100vh;margin:0;padding:0;background:#111;color:#fff;box-shadow:none;display:none}
+dialog#lightbox[open]{display:grid;place-items:center;overflow:auto}
+dialog#lightbox::backdrop{background:#000a}
+#lightbox figure{margin:0;padding:56px 16px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;min-height:100%;justify-content:center;box-sizing:border-box}
+#lightbox img{max-width:calc(100vw - 32px);max-height:calc(100vh - 120px);object-fit:contain;cursor:zoom-in;background:#000}
+#lightbox.actual img{max-width:none;max-height:none;cursor:zoom-out}
+#lightbox figcaption{font-size:1rem;color:#ddd;text-align:center}
+#lightbox .lbx{position:fixed;top:10px;right:12px;color:#fff;background:#0006;z-index:2}
+#lightbox .lbx:hover{background:#000a;color:#fff}
 @media print{
   header.top,nav.tabs,.tools,.ctools,#panel,.legend{display:none!important}
   body{overflow:visible;display:block;height:auto}
@@ -345,6 +364,7 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
 
 <dialog id="dlg"></dialog>
 <dialog id="dlg2"></dialog>
+<dialog id="lightbox" aria-label="Photo"></dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
 <input type="file" id="photoIn" accept="image/*" hidden>
@@ -381,7 +401,7 @@ const brColor = pid => { const b = IX.branch[pid]; return b == null || b < 0 ? '
 
 /* ---------- normalising (Firebase turns arrays into objects and drops empty ones) ---------- */
 const arr = x => Array.isArray(x) ? x.filter(v => v != null) : (x && typeof x === 'object') ? Object.keys(x).sort((a, b) => a - b).map(k => x[k]).filter(v => v != null) : [];
-const PF = ['given', 'middle', 'surname', 'birthSurname', 'nick', 'sex', 'birth', 'birthPlace', 'death', 'deathPlace', 'notes', 'photo'];
+const PF = ['given', 'middle', 'surname', 'birthSurname', 'nick', 'sex', 'birth', 'birthPlace', 'death', 'deathPlace', 'notes', 'photo', 'photoV'];
 function normPerson(p, id) { p = p || {}; p.id = id; for (const f of PF) if (typeof p[f] !== 'string') p[f] = p[f] == null ? '' : String(p[f]); p.deceased = !!p.deceased || !!p.death; p.parentsUncertain = !!p.parentsUncertain; return p; }
 function normUnion(u, id) { u = u || {}; u.id = id; u.partners = arr(u.partners); u.children = arr(u.children); for (const f of ['married', 'place', 'ended', 'endDate', 'notes']) if (typeof u[f] !== 'string') u[f] = u[f] == null ? '' : String(u[f]); return u; }
 function normTree(t) {
@@ -569,7 +589,7 @@ async function flush() {
     setStatus('busy');
     const c = pending[0];
     try {
-      const r = await fetch(url(c.path), c.v == null ? { method: 'DELETE' } : { method: 'PUT', body: JSON.stringify(c.v) });
+      const r = await fetch(c.abs || url(c.path), c.v == null ? { method: 'DELETE' } : { method: 'PUT', body: JSON.stringify(c.v) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       pending.shift(); LS.set('pending', pending);
     } catch (e) {
@@ -603,7 +623,7 @@ function applyRemote(path, data, merge) {
     if (merge) { for (const k in data) applyRemote('/' + k, data[k], false); return; }
     if (data == null) { if (T) { toast('The shared tree is empty — uploading this copy.'); uploadAll(); } return; }
     T = normTree(data);
-    for (const c of pending) setAt(c.path.split('/'), c.v); // keep my unsent edits on top
+    for (const c of pending) if (c.path) setAt(c.path.split('/'), c.v); // keep my unsent edits on top
   } else if (merge) { for (const k in data) setAt([...seg, k], data[k]); }
   else setAt(seg, data);
   for (const k of ['people', 'unions']) for (const id in T[k]) T[k][id] = k === 'people' ? normPerson(T[k][id], id) : normUnion(T[k][id], id);
@@ -834,7 +854,11 @@ function renderFan() {
 }
 
 /* ---------- person avatar & small card ---------- */
-function avatar(p, lg) { p = typeof p === 'string' ? P(p) : p; const bc = brColor(p.id); return `<span class="av${lg ? ' lg' : ''}" style="--bc:${bc};${p.photo ? `background-image:url('${p.photo}')` : ''}">${p.photo ? '' : esc(initials(p))}</span>`; }
+function avatar(p, lg) {
+  p = typeof p === 'string' ? P(p) : p; const bc = brColor(p.id);
+  const zoom = lg && p.photo ? ` data-zoom="${p.id}" role="button" tabindex="0" aria-label="See ${esc(p.given)}’s photo" title="Tap to enlarge"` : '';
+  return `<span class="av${lg ? ' lg' : ''}"${zoom} style="--bc:${bc};${p.photo ? `background-image:url('${p.photo}')` : ''}">${p.photo ? '' : esc(initials(p))}</span>`;
+}
 function pcard(id, sub) {
   const p = P(id); if (!p) return '';
   const rel = relToMe(id);
@@ -1267,6 +1291,7 @@ async function deletePerson(pid) {
     ch.push(!nu.partners.length && !nu.children.length || (!nu.children.length && nu.partners.length < 2) ? delU(u.id) : putU(nu));
   }
   closeDlg(dlg); if (state.sel === pid) state.sel = parentsOf(pid)[0] || IX.root; closePanel();
+  if (p.photoV) deleteFullPhoto(pid);
   commit(ch, `Deleted ${shortName(p)}`);
 }
 function moveChild(uid, cid, dir) {
@@ -1347,10 +1372,10 @@ async function addRelative() {
 }
 
 /* ---------- the person editor ---------- */
-let editId = null, photoData;
+let editId = null, photoData, photoFull;
 function openEditor(id) {
   const p = P(id); if (!p) return;
-  editId = id; photoData = undefined;
+  editId = id; photoData = undefined; photoFull = undefined;
   const pu = parentUnion(id);
   const sel = (v, opts) => opts.map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${l}</option>`).join('');
   let conns = `<div class="sec">Parents</div><div class="conn"><div class="row"><span>${pu ? esc(pu.partners.map(shortName).join(' & ')) || '(unknown)' : '<span class="muted">Not recorded</span>'}${p.parentsUncertain ? ' <span class="badge warn">which marriage?</span>' : ''}</span>
@@ -1367,7 +1392,7 @@ function openEditor(id) {
   conns += `<div class="row" style="margin-top:6px"><button class="btn sm" data-ed="addSpouse">+ Add a spouse / partner</button>${!unionsOf(id).length ? '<button class="btn sm" data-ed="addChildNew">+ Add a child</button>' : ''}</div>`;
   openDlg(dlg, `<div class="dh"><h3>Edit ${esc(shortName(p))}</h3><button class="iconbtn" data-ed="close" aria-label="Close">✕</button></div>
   <div class="db"><form id="pf" class="form" autocomplete="off">
-    <div class="full row" style="gap:14px">${avatar(p, true).replace('class="av lg"', 'class="av lg" id="pfAv"')}<span class="row"><button type="button" class="btn sm" data-ed="photo">${p.photo ? 'Change' : 'Add a'} photo</button>${p.photo ? '<button type="button" class="btn sm" data-ed="nophoto">Remove photo</button>' : ''}</span></div>
+    <div class="full row" style="gap:14px">${avatar(p, true).replace('class="av lg"', 'class="av lg" id="pfAv"')}<span class="row"><button type="button" class="btn sm" data-ed="photo">${p.photo ? 'Change' : 'Add a'} photo</button>${p.photo && p.photoV ? '<button type="button" class="btn sm" data-ed="recrop">Adjust crop</button>' : ''}${p.photo ? '<button type="button" class="btn sm" data-ed="nophoto">Remove photo</button>' : ''}</span></div>
     <label>First name<input name="given" value="${esc(p.given)}" required></label>
     <label>Middle name(s)<input name="middle" value="${esc(p.middle)}"></label>
     <label>Last name<input name="surname" value="${esc(p.surname)}"></label>
@@ -1393,6 +1418,8 @@ function saveEditor(close = true) {
   np.deceased = f.elements.deceased.checked || !!np.death;
   if (!np.given) { f.elements.given.focus(); return; }
   if (photoData !== undefined) np.photo = photoData;
+  if (photoFull === null) { if (p.photoV) deleteFullPhoto(editId); np.photoV = ''; }
+  else if (photoFull) { np.photoV = Date.now().toString(36); saveFullPhoto(editId, photoFull, np.photoV); }
   const ch = [];
   if (JSON.stringify(np) !== JSON.stringify(p)) ch.push(putP(np));
   // marriage fields
@@ -1410,7 +1437,8 @@ dlg.addEventListener('click', async e => {
   if (a === 'close') return closeDlg(dlg);
   if (a === 'save') return saveEditor();
   if (a === 'photo') return $('#photoIn').click();
-  if (a === 'nophoto') { photoData = ''; $('#pfAv').style.backgroundImage = ''; $('#pfAv').textContent = initials(P(id)); return; }
+  if (a === 'nophoto') { photoData = ''; photoFull = null; const av = $('#pfAv'); av.style.backgroundImage = ''; av.textContent = initials(P(id)); av.removeAttribute('data-zoom'); return; }
+  if (a === 'recrop') { const full = photoFull || await loadFullPhoto(id); if (!full) return toast('The full photo isn’t available on this device yet.'); const r = await openCropper(full, false); if (r) setEditorPhoto(r.thumb, photoFull); return; }
   if (a === 'delete') return deletePerson(id);
   saveEditor(false);  // keep typed changes before touching links
   if (a === 'changeParents') await changeParents(id);
@@ -1423,15 +1451,16 @@ dlg.addEventListener('click', async e => {
   else if (a === 'up' || a === 'down') moveChild(b.dataset.u, b.dataset.c, a === 'up' ? -1 : 1);
   if (P(id)) openEditor(id);
 });
+function setEditorPhoto(thumb, full) {
+  photoData = thumb; if (full !== undefined) photoFull = full;
+  const av = $('#pfAv'); if (av) { av.style.backgroundImage = `url('${thumb}')`; av.textContent = ''; av.removeAttribute('data-zoom'); }
+}
 $('#photoIn').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  try {
-    const img = await createImageBitmap(f);
-    const S = 240, c = document.createElement('canvas'); c.width = c.height = S;
-    const s = Math.min(img.width, img.height); c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S);
-    photoData = c.toDataURL('image/jpeg', 0.78);
-    const av = $('#pfAv'); if (av) { av.style.backgroundImage = `url('${photoData}')`; av.textContent = ''; }
-  } catch (err) { toast('Couldn’t read that photo.'); }
+  const u = URL.createObjectURL(f);
+  const r = await openCropper(u, true);
+  URL.revokeObjectURL(u);
+  if (r) setEditorPhoto(r.thumb, r.full);
 });
 
 /* ---------- "who are you?" ---------- */
@@ -1500,6 +1529,7 @@ dlg.addEventListener('click', async e => {
       const prev = conn; conn = c;
       await uploadAll();
       LS.set('conn', conn); LS.set('tree', T); saveLocal(); openStream(); setStatus('live');
+      shareLocalPhotos();
       toast('Your tree is live! Share the QR code.'); openShare();
     } catch (err) { conn = null; $('#shareMsg').textContent = 'Couldn’t reach the database (' + err.message + '). Check the address and that the rules were published.'; }
   }
@@ -1511,7 +1541,7 @@ async function connect(c, quiet) {
   setStatus('busy');
   try {
     const data = await fetchShared();
-    if (data) { T = normTree(data); for (const p of pending) setAt(p.path.split('/'), p.v); saveLocal(); }
+    if (data) { T = normTree(data); for (const p of pending) if (p.path) setAt(p.path.split('/'), p.v); saveLocal(); }
     else if (!T) { toast('That family link points to an empty tree.'); }
     else await uploadAll();
     afterChange(); show(state.view === 'welcome' ? 'tree' : state.view);
@@ -1727,6 +1757,138 @@ window.addEventListener('hashchange', () => {
   else { renderWelcome(); show('welcome'); }
   if (conn) connect(conn, true);
 })();
+
+/* ================================================================
+   Photos: crop (drag + zoom) when adding, full-size viewer on tap.
+   The small square crop lives on the person (person.photo, ~20 KB) so
+   the tree stays light. The full-size original is stored apart and
+   only loaded when someone opens it:
+     shared tree: <db>/trees/<key>_photos/<person id> = {v, data}
+     this device: IndexedDB "gft-photos" (also a cache for shared ones)
+   person.photoV is the version of the full photo (changes on replace).
+   ================================================================ */
+const IDB = (() => {
+  let dbp;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('gft-photos', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('p');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const run = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('p', mode); const req = fn(t.objectStore('p')); t.oncomplete = () => res(req.result); t.onerror = () => rej(t.error); }); };
+  return { get: k => run('readonly', s => s.get(k)).catch(() => null), put: (k, v) => run('readwrite', s => s.put(v, k)).catch(() => null), del: k => run('readwrite', s => s.delete(k)).catch(() => null) };
+})();
+const photoKey = pid => (conn ? conn.key : 'local') + ':' + pid;
+const photoUrl = pid => `${conn.db}/trees/${conn.key}_photos/${pid}.json`;
+
+function saveFullPhoto(pid, data, v) {
+  IDB.put(photoKey(pid), { v, data });
+  if (conn) { pending.push({ abs: photoUrl(pid), v: { v, data } }); LS.set('pending', pending); flush(); }
+}
+function deleteFullPhoto(pid) {
+  IDB.del(photoKey(pid));
+  if (conn) { pending.push({ abs: photoUrl(pid), v: null }); LS.set('pending', pending); flush(); }
+}
+// when a tree made on this device is shared, send along the full-size photos kept here
+async function shareLocalPhotos() {
+  for (const p of Object.values(T.people)) {
+    if (!p.photoV) continue;
+    const d = await IDB.get('local:' + p.id);
+    if (d && d.data) saveFullPhoto(p.id, d.data, d.v);
+  }
+}
+async function loadFullPhoto(pid) {
+  const p = P(pid); if (!p || !p.photoV) return null;
+  const cached = await IDB.get(photoKey(pid));
+  if (cached && cached.v === p.photoV) return cached.data;
+  if (conn) {
+    try { const r = await fetch(photoUrl(pid)); const j = r.ok ? await r.json() : null; if (j && j.data) { IDB.put(photoKey(pid), j); return j.data; } } catch (e) {}
+  }
+  return cached ? cached.data : null;
+}
+
+/* ---------- cropper ---------- */
+// src: image URL/data URL.  makeFull: also return a downsized full-size copy.
+function openCropper(src, makeFull) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onerror = () => { toast('Couldn’t read that photo.'); resolve(null); };
+    img.onload = () => {
+      const W = img.naturalWidth, H = img.naturalHeight;
+      openDlg(dlg2, `<div class="dh"><h3>Position the photo</h3><button class="iconbtn" data-c="x" aria-label="Cancel">✕</button></div>
+        <div class="db"><p class="muted" style="margin-top:0">Drag to move it. Zoom with the slider, by pinching, or with the scroll wheel.</p>
+        <div class="crop" id="crop"><img id="cropImg" alt="" draggable="false"><div class="cropgrid"></div></div>
+        <div class="zoomrow"><button class="btn sm" data-c="out" aria-label="Zoom out">−</button><input type="range" id="cropZ" min="1" max="6" step="0.01" value="1" aria-label="Zoom"><button class="btn sm" data-c="in" aria-label="Zoom in">+</button></div></div>
+        <div class="df"><button class="btn" data-c="x">Cancel</button><button class="btn primary" data-c="ok">Use this photo</button></div>`);
+      const box = $('#crop'), im = $('#cropImg'), zr = $('#cropZ');
+      im.src = src;
+      let S = box.clientWidth, base = S / Math.min(W, H), z = 1, ox, oy;
+      const scale = () => base * z;
+      const clamp = () => { const s = scale(); ox = Math.min(0, Math.max(S - W * s, ox)); oy = Math.min(0, Math.max(S - H * s, oy)); };
+      const draw = () => { clamp(); im.style.transform = `translate(${ox}px,${oy}px) scale(${scale()})`; zr.value = z; };
+      ox = (S - W * base) / 2; oy = (S - H * base) / 2; draw();
+      const zoomTo = (nz, cx = S / 2, cy = S / 2) => { nz = Math.min(6, Math.max(1, nz)); const r = nz / z; ox = cx - (cx - ox) * r; oy = cy - (cy - oy) * r; z = nz; draw(); };
+      const local = e => { const b = box.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+      const pts = new Map(); let pinch = null;
+      box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); pts.set(e.pointerId, local(e)); pinch = null; box.classList.add('drag'); });
+      box.addEventListener('pointermove', e => {
+        if (!pts.has(e.pointerId)) return;
+        const p = local(e), prev = pts.get(e.pointerId); pts.set(e.pointerId, p);
+        if (pts.size === 1) { ox += p[0] - prev[0]; oy += p[1] - prev[1]; draw(); }
+        else if (pts.size === 2) {
+          const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          if (pinch) { ox += c[0] - pinch.c[0]; oy += c[1] - pinch.c[1]; zoomTo(z * d / pinch.d, c[0], c[1]); }
+          pinch = { d, c };
+        }
+      });
+      const up = e => { pts.delete(e.pointerId); pinch = null; if (!pts.size) box.classList.remove('drag'); };
+      box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+      box.addEventListener('wheel', e => { e.preventDefault(); const [cx, cy] = local(e); zoomTo(z * Math.exp(-e.deltaY * 0.002), cx, cy); }, { passive: false });
+      zr.addEventListener('input', () => zoomTo(+zr.value));
+      let done = false;
+      const fin = v => { if (done) return; done = true; dlg2.onclick = null; dlg2.onclose = null; closeDlg(dlg2); resolve(v); };
+      dlg2.onclick = e => {
+        const b = e.target.closest('[data-c]'); if (!b) return;
+        const c = b.dataset.c;
+        if (c === 'in') return zoomTo(z * 1.25); if (c === 'out') return zoomTo(z / 1.25);
+        if (c === 'x') return fin(null);
+        // crop -> 320 px square thumbnail
+        const T = 320, cv = document.createElement('canvas'); cv.width = cv.height = T;
+        const s = scale(); cv.getContext('2d').drawImage(img, -ox / s, -oy / s, S / s, S / s, 0, 0, T, T);
+        const out = { thumb: cv.toDataURL('image/jpeg', 0.8), full: undefined };
+        if (makeFull) { // keep the whole picture too, at most 1600 px on the long side
+          const k = Math.min(1, 1600 / Math.max(W, H)), fc = document.createElement('canvas');
+          fc.width = Math.round(W * k); fc.height = Math.round(H * k);
+          fc.getContext('2d').drawImage(img, 0, 0, fc.width, fc.height);
+          out.full = fc.toDataURL('image/jpeg', 0.82);
+        }
+        fin(out);
+      };
+      dlg2.onclose = () => fin(null);
+    };
+    img.src = src;
+  });
+}
+
+/* ---------- full-size viewer ---------- */
+const lb = $('#lightbox');
+async function openLightbox(pid) {
+  const p = P(pid); if (!p || !p.photo) return;
+  lb.innerHTML = `<button class="iconbtn lbx" data-lbx aria-label="Close">✕</button>
+    <figure><img src="${p.photo}" alt="Photo of ${esc(fullName(p))}" title="Tap to see it at full size"><figcaption><b>${esc(fullName(p))}</b> ${esc(lifeYears(p))}<span id="lbNote">${p.photoV ? ' · loading full photo…' : ''}</span></figcaption></figure>`;
+  if (!lb.open) lb.showModal();
+  if (!p.photoV) return;
+  const full = await loadFullPhoto(pid);
+  const note = $('#lbNote');
+  if (full && lb.open) { const im = lb.querySelector('img'); im.src = full; if (note) note.textContent = ''; }
+  else if (note) note.textContent = ' · only the cropped photo is available';
+}
+lb.addEventListener('click', e => {
+  if (e.target.closest('[data-lbx]') || e.target === lb || e.target.tagName === 'FIGURE') return lb.close();
+  const im = e.target.closest('img'); if (im) lb.classList.toggle('actual');
+});
+lb.addEventListener('close', () => lb.classList.remove('actual'));
+document.addEventListener('click', e => { const z = e.target.closest('[data-zoom]'); if (z) { e.preventDefault(); e.stopPropagation(); openLightbox(z.dataset.zoom); } }, true);
+document.addEventListener('keydown', e => { const z = e.target.closest && e.target.closest('[data-zoom]'); if (z && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openLightbox(z.dataset.zoom); } });
 </script>
 </body>
 </html>
