@@ -19,6 +19,9 @@ The repo is public, so it holds **no family data**. Visitors without the family 
   so the key in the link is the password. Records: `people/<id>`, `unions/<id>` (partners[], children[]),
   `log/<id>`, `meta`, `root`. Each edit PUTs only the records it changed (last write wins per record),
   edits made offline queue in localStorage (`gft.pending`) and are sent on reconnect.
+- Photos: `person.photo` is a 320 px square crop (data URL) kept in the tree. The full-size original
+  (max 1600 px) is stored apart so the tree stays light: shared at `<db>/trees/<key>_photos/<id>` = {v, data},
+  locally in IndexedDB `gft-photos`; `person.photoV` is its version. Backups (.json) hold only the crops.
 - Firebase turns arrays into objects and drops empty ones: always go through normPerson/normUnion.
 
 ## Rules
