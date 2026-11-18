@@ -247,6 +247,17 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
   main,.view.on{position:static;overflow:visible}
 }
 @media (prefers-reduced-motion:reduce){#panel,.toast{transition:none}.flash{animation:none}}
+
+/* how are we related */
+.relpick{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:end}
+.relbox{min-width:0}
+.relhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;min-height:30px}
+.relchosen{display:flex;gap:6px;align-items:center}
+.relchosen .pc{flex:1}
+.pick input{padding:14px 14px;font-size:1.05rem}
+.relswap{height:52px;width:52px;padding:0;font-size:1.3rem}
+.relresult{padding:22px;margin-top:18px;border-left:6px solid var(--accent)}
+@media (max-width:700px){.relpick{grid-template-columns:1fr}.relswap{justify-self:center;height:40px;width:52px}}
 </style>
 </head>
 <body>
@@ -258,6 +269,7 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
     <div class="results" id="qres" role="listbox"></div>
   </div>
   <div class="hbtns">
+    <button class="pill" id="relBtn" title="How are two people related?">🔗 <span class="lbl">How related?</span></button>
     <button class="pill" id="meBtn" title="Tell the tree who you are">🙋 <span class="lbl" id="meLbl">Who are you?</span></button>
     <button class="pill" id="syncBtn" title="Sharing and saving"><span class="dot" id="syncDot"></span><span class="lbl" id="syncLbl">On this device</span></button>
     <button class="pill" id="undoBtn" title="Undo" disabled hidden>↶ <span class="lbl">Undo</span></button>
@@ -281,10 +293,10 @@ pre.code{background:var(--paper2);padding:10px 12px;border-radius:0;font-size:.8
 </header>
 <nav class="tabs" role="tablist" aria-label="Views">
   <button role="tab" data-view="tree">🌳 Tree</button>
+  <button role="tab" data-view="related">🔗 How are we related?</button>
   <button role="tab" data-view="fan">🌀 Fan</button>
   <button role="tab" data-view="family">👪 Family</button>
   <button role="tab" data-view="list">📜 List</button>
-  <button role="tab" data-view="related">🔗 How are we related?</button>
   <button role="tab" data-view="timeline">📅 Timeline</button>
   <button role="tab" data-view="help">✍️ Fill in the gaps<span class="n" id="gapN" hidden></span></button>
 </nav>
@@ -852,7 +864,7 @@ function renderFamily() {
       ag != null ? (p.deceased ? `aged ${ag}` : `${ag} years old`) : ''].filter(Boolean).join(' · ') || '<span class="muted">No dates yet</span>'}</div>
     ${rel ? `<div style="margin-top:6px"><span class="badge me">${esc(rel)}</span></div>` : ''}
     ${p.notes ? `<p style="margin:8px 0 0;white-space:pre-wrap">${esc(p.notes)}</p>` : ''}</div>
-    <div class="acts row"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-act="tree" data-id="${id}">🌳 Show in tree</button>${LS.get('me') !== id ? `<button class="btn" data-act="relate" data-id="${id}">🔗 How related?</button>` : ''}</div></div>`;
+    <div class="acts row"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-act="tree" data-id="${id}">🌳 Show in tree</button><button class="btn" data-act="relate" data-id="${id}">🔗 How related?</button></div></div>`;
   const us = unionsOf(id);
   h += `<div class="sec">${us.length > 1 ? 'Marriages & partners' : 'Spouse / partner'}</div>`;
   if (!us.length) h += `<p class="muted">None recorded.</p>`;
@@ -901,34 +913,53 @@ function renderList() {
 
 /* ---------- HOW ARE WE RELATED ---------- */
 state.relA = null; state.relB = null;
-function renderRelated() {
+function relPicker(key, label, id) {
+  const me = LS.get('me');
+  return `<div class="relbox"><div class="relhead"><span>${label}</span>${me && P(me) && id !== me ? `<button class="btn sm" data-relme="${key}">🙋 Me</button>` : ''}</div>
+    <div class="pick">${id && P(id)
+      ? `<div class="relchosen">${pcard(id, lifeYears(id) || context(id))}<button class="iconbtn" data-relclear="${key}" aria-label="Choose someone else">✕</button></div>`
+      : `<input data-pick="${key}" placeholder="Type a name…" autocomplete="off" aria-label="${esc(label)}">`}</div></div>`;
+}
+function renderRelated(focusKey) {
   const pad = $('#relPad');
   const me = LS.get('me');
-  if (!state.relA || !P(state.relA)) state.relA = me && P(me) ? me : null;
+  if (state.relA === undefined || state.relA === null && !state.relTouched) state.relA = me && P(me) ? me : null;
+  if (state.relA && !P(state.relA)) state.relA = null; if (state.relB && !P(state.relB)) state.relB = null;
   const A = state.relA, B = state.relB;
-  let h = `<h2 style="margin:0 0 4px">How are we related?</h2><p class="muted" style="margin:0 0 16px">Pick any two people.</p>
-    <div class="form"><label>First person<div class="pick"><input data-pick="relA" value="${A ? esc(fullName(A)) : ''}" placeholder="Type a name…" autocomplete="off"></div></label>
-    <label>Second person<div class="pick"><input data-pick="relB" value="${B ? esc(fullName(B)) : ''}" placeholder="Type a name…" autocomplete="off"></div></label></div>`;
-  if (A && B && P(A) && P(B)) {
-    const r = relationship(A, B);
-    const owner = `${P(A).given}’s`;
-    let sentence;
+  let h = `<h2 style="margin:0 0 4px">How are we related?</h2><p class="muted" style="margin:0 0 16px">Search for any two people in the tree.</p>
+    <div class="relpick">${relPicker('relA', 'First person', A)}<button class="btn relswap" data-relswap title="Swap" aria-label="Swap the two people"${A || B ? '' : ' disabled'}>⇄</button>${relPicker('relB', 'Second person', B)}</div>`;
+  if (A && B) {
+    const r = relationship(A, B), back = relationship(B, A);
+    let sentence, reverse = '';
     if (r.kind === 'self') sentence = 'That’s the same person!';
     else if (r.kind === 'none') sentence = `${esc(shortName(B))} and ${esc(shortName(A))} aren’t connected in this tree yet.`;
-    else sentence = `${esc(shortName(B))} is <span class="rel">${esc(describeRel(r, owner))}</span>.`;
-    h += `<div class="card" style="padding:20px;margin-top:18px"><p class="relbig">${sentence}</p>`;
+    else {
+      sentence = `${esc(shortName(B))} is <span class="rel">${esc(describeRel(r, P(A).given + '’s'))}</span>.`;
+      if (back && back.kind !== 'none' && !(back.kind === r.kind && back.term === r.term)) reverse = `${esc(shortName(A))} is ${esc(describeRel(back, P(B).given + '’s'))}.`;
+    }
+    h += `<div class="card relresult"><p class="relbig">${sentence}</p>${reverse ? `<p class="muted" style="margin:6px 0 0;font-size:1.05rem">and ${reverse}</p>` : ''}`;
     const br = r.r;
     if (br && br.common && br.common.length) {
-      const top = br.common;
-      const colA = br.pathA, colB = br.pathB;
-      h += `<p class="muted" style="margin:8px 0 0">${br.da && br.db ? 'Closest shared ancestors' : 'Direct line'}: ${esc(top.map(shortName).join(' & '))}${r.kind === 'spouse-of' ? ` · through ${esc(P(r.via).given)}, ${esc(P(B).given)}’s ${esc(sexWord(P(r.via), 'wife', 'husband', 'spouse'))}` : ''}${r.kind === 'via-spouse' ? ` · through ${esc(P(r.via).given)}, ${esc(P(A).given)}’s ${esc(sexWord(P(r.via), 'wife', 'husband', 'spouse'))}` : ''}</p>
+      const top = br.common, colA = br.pathA, colB = br.pathB;
+      const via = r.kind === 'spouse-of' ? ` · through ${esc(P(r.via).given)}, ${esc(P(B).given)}’s ${esc(sexWord(P(r.via), 'wife', 'husband', 'spouse'))}`
+        : r.kind === 'via-spouse' ? ` · through ${esc(P(r.via).given)}, ${esc(P(A).given)}’s ${esc(sexWord(P(r.via), 'wife', 'husband', 'spouse'))}` : '';
+      const gens = br.da && br.db ? `Both descend from ${esc(top.map(shortName).join(' & '))}: ${esc(P(A).given)} ${br.da === 1 ? '1 generation' : br.da + ' generations'} down, ${esc(P(B).given)} ${br.db === 1 ? '1 generation' : br.db + ' generations'} down.` : 'Direct line.';
+      h += `<p class="muted" style="margin:10px 0 0">${gens}${via}</p>
         <div class="ladder"><div class="top"><div class="grid" style="grid-template-columns:repeat(${top.length},1fr)">${top.map(x => pcard(x, lifeYears(x) || 'shared ancestor')).join('')}</div></div>
-        <div class="col">${[...colA].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === br.pathA[0] ? (r.kind === 'via-spouse' ? 'spouse of ' + P(A).given : 'first person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div>
-        <div class="col">${[...colB].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === br.pathB[0] ? (r.kind === 'spouse-of' ? 'spouse of ' + P(B).given : 'second person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div></div>`;
+        <div class="col">${[...colA].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === colA[0] ? (r.kind === 'via-spouse' ? 'spouse of ' + P(A).given : 'first person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div>
+        <div class="col">${[...colB].reverse().map(x => '<div class="arrow">↓</div>' + pcard(x, x === colB[0] ? (r.kind === 'spouse-of' ? 'spouse of ' + P(B).given : 'second person') : lifeYears(x))).join('') || '<p class="muted" style="text-align:center">(direct line)</p>'}</div></div>`;
     }
     h += `</div>`;
-  } else if (!me) h += `<p class="muted" style="margin-top:18px">Tip: tap <b>🙋 Who are you?</b> at the top and every card will say how that person is related to you.</p>`;
+  } else {
+    h += `<p class="muted" style="margin-top:18px">${!me ? 'Tip: tap <b>🙋 Who are you?</b> at the top, and you’ll be filled in as the first person automatically — and every card will say how you’re related.' : 'Start typing a name in the empty box.'}</p>`;
+  }
   pad.innerHTML = h;
+  const f = $(`#relPad input[data-pick="${focusKey || (!A ? 'relA' : !B ? 'relB' : '')}"]`);
+  if (f && (focusKey || state.view === 'related') && document.activeElement !== f) setTimeout(() => f.focus(), 30);
+}
+function openRelated(a, b) {
+  state.relTouched = true; state.relA = a ?? null; state.relB = b ?? null;
+  closePanel(); show('related');
 }
 
 /* ---------- TIMELINE ---------- */
@@ -1026,7 +1057,7 @@ function openPanel(id) {
     ${p.birth || p.birthPlace ? `<p style="margin:4px 0">Born ${esc([p.birth, p.birthPlace].filter(Boolean).join(', '))}</p>` : ''}
     ${p.death || p.deathPlace ? `<p style="margin:4px 0">Died ${esc([p.death, p.deathPlace].filter(Boolean).join(', '))}</p>` : ''}
     ${p.notes ? `<p style="white-space:pre-wrap">${esc(p.notes)}</p>` : ''}
-    <div class="row" style="margin:12px 0"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-go="${id}">👪 Family</button><button class="btn" data-act="tree" data-id="${id}">🌳 Tree</button></div>
+    <div class="row" style="margin:12px 0"><button class="btn primary" data-act="edit" data-id="${id}">✏️ Edit</button><button class="btn" data-go="${id}">👪 Family</button><button class="btn" data-act="tree" data-id="${id}">🌳 Tree</button><button class="btn" data-act="relate" data-id="${id}">🔗 How related?</button></div>
     ${p.parentsUncertain ? uncertainBox(id) : ''}
     ${par.length ? `<div class="sec">Parents</div>${par.map(x => pcard(x)).join('')}` : ''}
     ${spouses(id).length ? `<div class="sec">Spouse / partner</div>${spouses(id).map(x => pcard(x)).join('')}` : ''}
@@ -1514,7 +1545,7 @@ document.addEventListener('click', async e => {
     const a = act.dataset.act, id = act.dataset.id;
     if (a === 'edit') return openEditor(id);
     if (a === 'tree') { closePanel(); return focusTree(id); }
-    if (a === 'relate') { state.relB = id; return show('related'); }
+    if (a === 'relate') { const me = LS.get('me'); return me && P(me) && me !== id ? openRelated(me, id) : openRelated(id, null); }
     if (a === 'addChild') return addChild(act.dataset.u);
     if (a === 'addSpouse') return addSpouse(id);
     if (a === 'addParent') return addParent(id);
@@ -1574,9 +1605,14 @@ $('#listClose').onclick = () => $$('#outline li ul').forEach(u => { if (u.parent
 $('#relPad').addEventListener('focusin', e => {
   const inp = e.target.closest('[data-pick]'); if (!inp || inp._wired) return; inp._wired = true;
   const box = document.createElement('div'); box.className = 'results'; inp.parentElement.appendChild(box);
-  attachSearch(inp, box, id => { state[inp.dataset.pick] = id; renderRelated(); });
-  inp.select();
+  attachSearch(inp, box, id => { state.relTouched = true; state[inp.dataset.pick] = id; renderRelated(); });
 });
+$('#relPad').addEventListener('click', e => {
+  const c = e.target.closest('[data-relclear]'); if (c) { state.relTouched = true; state[c.dataset.relclear] = null; return renderRelated(c.dataset.relclear); }
+  const m = e.target.closest('[data-relme]'); if (m) { state.relTouched = true; const k = m.dataset.relme, o = k === 'relA' ? 'relB' : 'relA'; if (state[o] === LS.get('me')) state[o] = state[k]; state[k] = LS.get('me'); return renderRelated(); }
+  if (e.target.closest('[data-relswap]')) { [state.relA, state.relB] = [state.relB, state.relA]; state.relTouched = true; return renderRelated(); }
+}, true);
+$('#relBtn').onclick = () => { if (!T) return; const me = LS.get('me'); openRelated(state.relTouched ? state.relA : (me && P(me) ? me : null), state.relTouched ? state.relB : null); };
 // help view: quick dates + filters
 $('#helpPad').addEventListener('change', e => {
   if (e.target.id === 'hb') { state.helpBranch = e.target.value; return renderHelp(); }
